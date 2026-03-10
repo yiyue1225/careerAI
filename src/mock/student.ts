@@ -1,0 +1,25 @@
+export const mockStudentProfile = {
+  name: '张三',
+  major: '计算机科学与技术',
+  grade: '大四',
+  skills: {
+    professionalSkills: ['Java', 'Python', 'MySQL'],
+    certificates: ['英语四级'],
+    innovation: 3,
+    learningAbility: 4,
+    stressTolerance: 3,
+    communication: 4,
+    internship: ['某公司实习3个月'],
+  },
+  dimensions: {
+    professional: 70,
+    certificate: 40,
+    innovation: 60,
+    learning: 80,
+    stress: 60,
+    communication: 75,
+    internship: 50,
+  },
+  completeness: 75,
+  competitiveness: 68,
+}
