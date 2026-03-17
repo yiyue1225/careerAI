@@ -126,27 +126,59 @@ import { positions } from '@/mock/positions'
 import RadarChart from '@/components/RadarChart.vue'
 import { useUserStore } from '@/store'
 
+// 定义学生画像类型（与 mock 数据结构一致）
+interface StudentProfile {
+  name: string
+  major: string
+  grade: string
+  skills: {
+    professionalSkills: string[]
+    certificates: string[]
+    innovation: number
+    learningAbility: number
+    stressTolerance: number
+    communication: number
+    internship: string[]
+  }
+  dimensions: {
+    professional: number
+    certificate: number
+    innovation: number
+    learning: number
+    stress: number
+    communication: number
+    internship: number
+  }
+  completeness: number
+  competitiveness: number
+}
+
 const router = useRouter()
 const userStore = useUserStore()
-const profile = ref(mockStudentProfile) // 模拟数据，实际由上传后赋值
+
+// 初始为 null，显示上传卡片；上传解析后赋值为真实数据
+const profile = ref<StudentProfile | null>(null)
 const uploading = ref(false)
+
 const colors = [
   { color: '#f56c6c', percentage: 60 },
   { color: '#e6a23c', percentage: 80 },
   { color: '#5cb87a', percentage: 100 },
 ]
 
-// 处理上传
+// 处理上传（选择文件后，可以保存文件对象，供后续使用）
 const handleUpload = (file: any) => {
   console.log('选中文件', file)
-  // 可以预览文件名等
+  // 可将文件保存在某个变量中，以便点击“开始解析”时上传
+  // 例如：selectedFile.value = file.raw
 }
 
-// 模拟解析
+// 模拟解析（实际应调用后端接口）
 const mockUpload = () => {
   uploading.value = true
   setTimeout(() => {
-    profile.value = mockStudentProfile
+    // 将 mock 数据赋值给 profile（模拟解析结果）
+    profile.value = mockStudentProfile as StudentProfile
     userStore.setStudentProfile(profile.value)
     uploading.value = false
   }, 1500)
@@ -166,7 +198,8 @@ const radarData = computed(() => {
       { name: '沟通能力', max: 100 },
       { name: '实习经验', max: 100 },
     ],
-    series: [{ name: '学生', value: Object.values(dims) }],
+    // 注意：Object.values 返回 unknown[]，需要断言为 number[]
+    series: [{ name: '学生', value: Object.values(dims) as number[] }],
   }
 })
 
@@ -177,7 +210,7 @@ const recommendedPositions = computed(() => {
     const dims = ['professional', 'certificate', 'innovation', 'learning', 'stress', 'communication', 'internship']
     let totalGap = 0
     dims.forEach(d => {
-      const studentVal = profile.value.dimensions[d as keyof typeof profile.value.dimensions] || 0
+      const studentVal = profile.value!.dimensions[d as keyof typeof profile.value.dimensions] || 0
       const posVal = pos.dimensions[d as keyof typeof pos.dimensions] || 0
       totalGap += Math.abs(studentVal - posVal)
     })

@@ -107,24 +107,124 @@
       </div>
     </div>
 
-    <!-- 报告对话框 -->
-    <el-dialog v-model="showReportDialog" title="职业生涯发展报告" width="60%" class="report-dialog">
-      <div id="reportContent" ref="reportContent" class="report-content">
-        <h2>职业生涯发展报告</h2>
-        <p class="date">生成时间：{{ new Date().toLocaleDateString() }}</p>
-        <h3>一、职业目标</h3>
-        <p>目标岗位：{{ targetPosition?.name }}</p>
-        <h3>二、人岗匹配分析</h3>
-        <p>综合匹配度：{{ matchScore }}%</p>
-        <h3>三、发展路径</h3>
-        <ul>
-          <li>初级 → 高级 → 技术主管</li>
-          <li>可转换方向：大数据开发、前端开发</li>
-        </ul>
-        <h3>四、行动计划</h3>
-        <p>短期：完成Java进阶课程，掌握Spring Cloud；参与开源项目或找一份后端实习。</p>
-        <p>中期：学习系统设计、分布式架构；争取成为项目核心开发，考取相关证书。</p>
+    <!-- 报告对话框（优化后） -->
+    <el-dialog v-model="showReportDialog" title="职业生涯发展报告" width="70%" class="report-dialog">
+      <div id="reportContent" ref="reportContent" style="font-family: 'Microsoft YaHei', sans-serif; padding: 20px; background: #fff;">
+        <!-- 页眉 -->
+        <div style="text-align: center; margin-bottom: 30px;">
+          <h1 style="font-size: 28px; color: #303133; margin: 0;">职业生涯发展报告</h1>
+          <p style="color: #909399; font-size: 14px; margin-top: 8px;">生成时间：{{ new Date().toLocaleDateString() }}</p>
+        </div>
+
+        <!-- 个人与目标信息卡片 -->
+        <div style="display: flex; gap: 20px; margin-bottom: 30px;">
+          <div style="flex: 1; background: #f5f7fa; padding: 20px; border-radius: 8px;">
+            <h3 style="margin-top: 0; color: #409eff;">👤 学生信息</h3>
+            <p style="margin: 8px 0;"><strong>姓名：</strong>{{ studentProfile?.name || '未填写' }}</p>
+            <p style="margin: 8px 0;"><strong>专业：</strong>{{ studentProfile?.major || '未填写' }}</p>
+            <p style="margin: 8px 0;"><strong>年级：</strong>{{ studentProfile?.grade || '未填写' }}</p>
+          </div>
+          <div style="flex: 1; background: #f5f7fa; padding: 20px; border-radius: 8px;">
+            <h3 style="margin-top: 0; color: #e6a23c;">🎯 目标岗位</h3>
+            <p style="margin: 8px 0;"><strong>岗位名称：</strong>{{ targetPosition?.name || '未选择' }}</p>
+            <p style="margin: 8px 0;"><strong>公司：</strong>{{ targetPosition?.company || '无' }}</p>
+            <p style="margin: 8px 0;"><strong>行业：</strong>{{ targetPosition?.industry || '无' }}</p>
+          </div>
+        </div>
+
+        <!-- 匹配分析 -->
+        <div style="background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
+          <h3 style="margin-top: 0; color: #67c23a;">📊 人岗匹配分析</h3>
+          <div style="display: flex; align-items: center; gap: 30px;">
+            <!-- 环形进度图（自定义绘制） -->
+            <div style="position: relative; width: 120px; height: 120px;">
+              <el-progress type="dashboard" :percentage="matchScore" :color="colors" :width="120" :stroke-width="10">
+                <template #default>{{ matchScore }}%</template>
+              </el-progress>
+            </div>
+            <div style="flex: 1;">
+              <p><strong>综合匹配度：</strong>{{ matchScore }}%</p>
+              <p><strong>优势维度：</strong>
+                <span v-for="(item, idx) in advantageDimensions" :key="idx" style="background: #ecf5ff; color: #409eff; padding: 2px 8px; border-radius: 12px; margin-right: 8px;">{{ item }}</span>
+              </p>
+              <p><strong>待提升维度：</strong>
+                <span v-for="(item, idx) in weaknessDimensions" :key="idx" style="background: #fef0f0; color: #f56c6c; padding: 2px 8px; border-radius: 12px; margin-right: 8px;">{{ item }}</span>
+              </p>
+            </div>
+          </div>
+
+          <!-- 匹配详情表格（简表） -->
+          <div style="margin-top: 20px;">
+            <h4 style="margin-bottom: 10px;">详细维度对比</h4>
+            <table style="width: 100%; border-collapse: collapse; border: 1px solid #ebeef5;">
+              <thead>
+                <tr style="background: #f5f7fa;">
+                  <th style="padding: 10px; text-align: left;">维度</th>
+                  <th style="padding: 10px; text-align: left;">学生得分</th>
+                  <th style="padding: 10px; text-align: left;">岗位要求</th>
+                  <th style="padding: 10px; text-align: left;">差距</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in matchDetails" :key="item.dimension">
+                  <td style="padding: 8px; border-bottom: 1px solid #ebeef5;">{{ item.dimension }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #ebeef5;">{{ item.student }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #ebeef5;">{{ item.position }}</td>
+                  <td style="padding: 8px; border-bottom: 1px solid #ebeef5;">{{ item.gap }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 发展路径 -->
+        <div style="background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
+          <h3 style="margin-top: 0; color: #f56c6c;">🚀 发展路径</h3>
+          <ul style="list-style: none; padding: 0;">
+            <li style="margin-bottom: 15px; padding-left: 20px; border-left: 3px solid #409eff;">
+              <strong>初级 → 高级：</strong> 1-3年，掌握核心技能，参与项目开发
+            </li>
+            <li style="margin-bottom: 15px; padding-left: 20px; border-left: 3px solid #e6a23c;">
+              <strong>高级 → 技术主管：</strong> 3-5年，具备架构设计能力，带领团队
+            </li>
+            <li style="margin-bottom: 15px; padding-left: 20px; border-left: 3px solid #67c23a;">
+              <strong>横向转换：</strong> 大数据开发、前端开发、产品经理
+            </li>
+          </ul>
+        </div>
+
+        <!-- 行动计划 -->
+        <div style="background: #fff; border: 1px solid #ebeef5; border-radius: 8px; padding: 20px; margin-bottom: 30px;">
+          <h3 style="margin-top: 0; color: #909399;">📅 行动计划</h3>
+          <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+              <tr style="background: #f5f7fa;">
+                <th style="padding: 10px; text-align: left;">阶段</th>
+                <th style="padding: 10px; text-align: left;">学习路径</th>
+                <th style="padding: 10px; text-align: left;">实践安排</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #ebeef5;">短期（1年内）</td>
+                <td style="padding: 10px; border-bottom: 1px solid #ebeef5;">Java进阶、Spring Cloud</td>
+                <td style="padding: 10px; border-bottom: 1px solid #ebeef5;">参与开源项目、找实习</td>
+              </tr>
+              <tr>
+                <td style="padding: 10px;">中期（2-3年）</td>
+                <td style="padding: 10px;">系统设计、分布式架构</td>
+                <td style="padding: 10px;">成为核心开发、考取证书</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 评估指标 -->
+        <div style="background: #fef0f0; border-radius: 8px; padding: 15px; color: #f56c6c;">
+          <strong>📌 评估周期与指标：</strong> 每季度复盘技能掌握度、项目经验、面试表现
+        </div>
       </div>
+
       <template #footer>
         <el-button @click="showReportDialog = false">取消</el-button>
         <el-button type="primary" @click="exportPDF">导出PDF</el-button>
@@ -172,8 +272,8 @@ const matchRadarData = computed(() => {
       { name: '实习经验', max: 100 },
     ],
     series: [
-  { name: '学生', value: Object.values(studentProfile.dimensions) as number[] },
-  { name: targetPosition.value.name, value: Object.values(targetPosition.value.dimensions) as number[] },
+      { name: '学生', value: Object.values(studentProfile.dimensions) as number[] },
+      { name: targetPosition.value.name, value: Object.values(targetPosition.value.dimensions) as number[] },
     ]
   }
 })
@@ -182,10 +282,10 @@ const matchDetails = computed(() => {
   if (!studentProfile || !targetPosition.value) return []
   const dims = ['professional', 'certificate', 'innovation', 'learning', 'stress', 'communication', 'internship']
   const dimNames = ['专业技能', '证书', '创新能力', '学习能力', '抗压能力', '沟通能力', '实习经验']
-  const pos = targetPosition.value // 提取局部变量
+  const pos = targetPosition.value
   return dims.map((d, idx) => {
     const s = studentProfile.dimensions[d as keyof typeof studentProfile.dimensions] || 0
-    const p = pos.dimensions[d as keyof typeof pos.dimensions] || 0 // 使用 pos 而不是 targetPosition.value
+    const p = pos.dimensions[d as keyof typeof pos.dimensions] || 0
     const gap = p - s
     return {
       dimension: dimNames[idx],
@@ -197,7 +297,24 @@ const matchDetails = computed(() => {
   })
 })
 
-// 其他推荐岗位（简单计算匹配度）
+// 计算优势维度和待提升维度（用于报告中标签展示）
+const advantageDimensions = computed(() => {
+  if (!matchDetails.value) return []
+  return matchDetails.value
+    .filter(item => item.gap === '满足' && item.student >= 80)
+    .map(item => item.dimension)
+    .slice(0, 3)
+})
+
+const weaknessDimensions = computed(() => {
+  if (!matchDetails.value) return []
+  return matchDetails.value
+    .filter(item => item.gap !== '满足')
+    .map(item => item.dimension)
+    .slice(0, 3)
+})
+
+// 其他推荐岗位
 const otherJobs = computed(() => {
   if (!studentProfile) return []
   return positions.filter(p => p.id !== selectedPositionId.value).slice(0, 3).map(p => {
@@ -225,7 +342,7 @@ const refreshMatch = () => {
     matchScore.value = 0
     return
   }
-  const pos = targetPosition.value // 存为局部变量，类型安全
+  const pos = targetPosition.value
   const total = Object.keys(studentProfile.dimensions).reduce((acc, key) => {
     const s = studentProfile.dimensions[key as keyof typeof studentProfile.dimensions]
     const j = pos.dimensions[key as keyof typeof pos.dimensions]
@@ -234,11 +351,34 @@ const refreshMatch = () => {
   matchScore.value = Math.round((total / Object.keys(studentProfile.dimensions).length) * 100)
 }
 
+watch(selectedPositionId, () => {
+  refreshMatch()
+})
+
 const showReportDialog = ref(false)
 const reportContent = ref<HTMLElement>()
 const exportPDF = () => {
   if (reportContent.value) {
-    html2pdf().from(reportContent.value).save('职业发展报告.pdf')
+    const opt = {
+      margin: [0.5, 0.5, 0.5, 0.5] as [number, number, number, number],
+      filename: '职业发展报告.pdf',
+      image: {
+        type: 'jpeg' as const,   // 关键修复
+        quality: 0.98,
+      },
+      html2canvas: {
+        scale: 2,
+        letterRendering: true,
+        useCORS: true,
+        logging: false,
+      },
+      jsPDF: {
+        unit: 'in',
+        format: 'a4',
+        orientation: 'portrait' as const,
+      },
+    }
+    html2pdf().set(opt).from(reportContent.value).save()
   }
 }
 const smartPolish = () => {
@@ -319,16 +459,11 @@ const smartPolish = () => {
 .trend-info {
   margin-top: 20px;
 }
-.report-dialog .report-content {
-  padding: 20px;
-  background: #fafafa;
-  border-radius: 8px;
+/* 报告对话框样式（覆盖原有） */
+.report-dialog :deep(.el-dialog__body) {
+  padding: 0;
 }
-.report-content h2 {
-  text-align: center;
-}
-.report-content .date {
-  text-align: center;
-  color: #909399;
+.report-content {
+  font-family: 'Microsoft YaHei', sans-serif;
 }
 </style>
