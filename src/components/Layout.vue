@@ -19,6 +19,10 @@
           <el-icon><DataLine /></el-icon>
           <span>职业匹配</span>
         </el-menu-item>
+        <el-menu-item index="/ai-assistant">
+          <el-icon><ChatDotRound /></el-icon>
+          <span>AI 智能助手</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
@@ -31,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { HomeFilled, Briefcase, User, DataLine } from '@element-plus/icons-vue'
+import { HomeFilled, Briefcase, User, DataLine, ChatDotRound } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 const route = useRoute()
 </script>

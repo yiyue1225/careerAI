@@ -4,6 +4,7 @@ import PositionLibrary from '@/views/PositionLibrary.vue'
 import PositionDetail from '@/views/PositionDetail.vue'
 import Profile from '@/views/Profile.vue'
 import MatchReport from '@/views/MatchReport.vue'
+import AIAssistant from '@/views/AIAssistant.vue'
 
 const routes = [
   { path: '/', component: Home },
@@ -11,6 +12,7 @@ const routes = [
   { path: '/position/:id', component: PositionDetail, props: true },
   { path: '/profile', component: Profile },
   { path: '/match', component: MatchReport },
+  { path: '/ai-assistant', component: AIAssistant },
 ]
 
 const router = createRouter({
