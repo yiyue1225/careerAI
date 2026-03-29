@@ -80,7 +80,23 @@ def export_all_for_ragflow():
             df_info = pd.read_sql("SELECT * FROM job_info", conn)
             df_info.to_csv(os.path.join(csv_dir, "job_info_original.csv"), index=False, encoding='utf-8-sig')
 
-            print("✅ 全部生成成功！")
+            # --- 步骤 C: 导出业务逻辑原件 ---
+            print("📊 正在导出业务权重与字典原件...")
+
+            # 1. 导出权重配置（AI 的评分依据）
+            pd.read_sql("SELECT * FROM weight_config", conn).to_csv(
+                os.path.join(csv_dir, "business_weight_logic.csv"), index=False, encoding='utf-8-sig')
+
+            # 2. 导出技能字典（AI 的技能识别依据）
+            pd.read_sql("SELECT * FROM skill_dictionary", conn).to_csv(
+                os.path.join(csv_dir, "skill_dictionary.csv"), index=False, encoding='utf-8-sig')
+
+            # 3. 导出标准岗位对照表
+            pd.read_sql("SELECT * FROM job_standard_profile", conn).to_csv(
+                os.path.join(csv_dir, "standard_job_map.csv"), index=False, encoding='utf-8-sig')
+
+            print(" 业务原件导出成功！")
+            print(" 全部生成成功！")
 
     except Exception as e:
         print(f"❌ 运行出错: {e}")
