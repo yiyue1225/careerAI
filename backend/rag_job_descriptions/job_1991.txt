@@ -1,0 +1,15 @@
+岗位识别码：ID_1991
+【官方岗位名称】：Java
+
+【A13 维度画像数据】
+- 基础评分：0
+- 专业评分：56
+- 素质评分：5
+
+【核心技能清单】
+- 详情：C++、Docker、Java、Kubernetes、MySQL、Oracle、Python、Spring、SQL、团队协作、学习能力、开发、微服务
+
+【专家分析报告】
+该岗位(Java)要求专业技能分为 56。
+核心考察：C++、Docker、Java、Kubernetes、MySQL、Oracle、Python、Spring、SQL、团队协作、学习能力、开发、微服务。
+################################################################

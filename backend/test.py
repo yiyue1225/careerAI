@@ -1,5 +1,6 @@
 import pymysql
 import pandas as pd
+import os
 
 # 1. 数据库配置
 db_config = {
@@ -7,84 +8,86 @@ db_config = {
     'user': 'root',
     'password': '060701',
     'database': 'career_ai',
-    'charset': 'utf8mb4',
-    'cursorclass': pymysql.cursors.DictCursor
+    'charset': 'utf8mb4'
 }
 
 
-def get_job_recommendations(student_rag_profile):
-    """
-    根据学生画像计算所有岗位的竞争力得分
-    :param student_rag_profile: RagFlow 输出的系数，例如 {'skill_depth': 1.3, 'quality_match': 1.1, 'base_match': 1.0}
-    """
+def export_all_for_ragflow():
+    # 创建输出目录
+    txt_dir = "rag_job_descriptions"
+    csv_dir = "rag_job_tables"
+    for d in [txt_dir, csv_dir]:
+        if not os.path.exists(d):
+            os.makedirs(d)
+
     conn = pymysql.connect(**db_config)
     try:
-        with conn.cursor() as cursor:
-            # SQL 逻辑：
-            # 1. 以 job_portrait 为主表获取维度数值 (basic, skill, quality)
-            # 2. 关联 job_skill 和 skill_dictionary 获取技能名称字符串
-            # 3. 关联 weight_config (这里假设你已经按 id 或 category 建立了权重)
-            # 如果目前没有 category 关联，我们先用程序内置的默认权重
-            sql = """
-                  SELECT p.job_id, \
-                         p.basic_requirement, \
-                         p.professional_skill, \
-                         p.professional_quality, \
-                         GROUP_CONCAT(d.skill_name SEPARATOR ' / ') as skill_tags
-                  FROM job_portrait p
-                           LEFT JOIN job_skill js ON p.job_id = js.job_id
-                           LEFT JOIN skill_dictionary d ON js.skill_id = d.id
-                  GROUP BY p.job_id \
-                  """
-            cursor.execute(sql)
+        with conn.cursor(pymysql.cursors.DictCursor) as cursor:
+            # --- 1. 确保 SQL 里的别名是 job_name ---
+            sql_txt = """
+                      SELECT p.job_id, \
+                             MAX(ji.job_name)                                  AS job_name, \
+                             p.basic_requirement, \
+                             p.professional_skill, \
+                             p.professional_quality, \
+                             GROUP_CONCAT(DISTINCT d.skill_name SEPARATOR '、') AS skill_list
+                      FROM job_portrait p
+                               LEFT JOIN job_info ji ON p.job_id = ji.id
+                               LEFT JOIN job_skill js ON p.job_id = js.job_id
+                               LEFT JOIN skill_dictionary d ON js.skill_id = d.id
+                      GROUP BY p.job_id \
+                      """
+
+            cursor.execute(sql_txt)
             jobs = cursor.fetchall()
 
-            # --- 设置权重配置 (若数据库 weight_config 已写好，可改为 SQL Join 获取) ---
-            # 这里先定义一套默认权重
-            W_BASIC = 0.2
-            W_SKILL = 0.5
-            W_QUALITY = 0.3
-            MIN_BUFFER = 3  # 补偿常数，解决你提到的 0 值不准确问题
+            print(f"开始生成 {len(jobs)} 个增强型岗位说明书...")
 
-            results = []
             for job in jobs:
-                # 核心公式计算：(数据库数量 + 补偿) * RagFlow深度系数 * 维度权重
+                # --- 2. 修正：这里必须使用 job_name，因为 SQL 别名改了 ---
+                name = job['job_name'] if job['job_name'] else f"岗位_{job['job_id']}"
 
-                # 基础要求分 (处理 0 值)
-                score_b = (job['basic_requirement'] + MIN_BUFFER) * student_rag_profile['base_match'] * W_BASIC
+                content = f"""
+岗位识别码：ID_{job['job_id']}
+【官方岗位名称】：{name}
 
-                # 专业技能分 (处理 0 值)
-                score_s = (job['professional_skill'] + MIN_BUFFER) * student_rag_profile['skill_depth'] * W_SKILL
+【A13 维度画像数据】
+- 基础评分：{job['basic_requirement']}
+- 专业评分：{job['professional_skill']}
+- 素质评分：{job['professional_quality']}
 
-                # 职业素质分 (处理 0 值)
-                score_q = (job['professional_quality'] + MIN_BUFFER) * student_rag_profile['quality_match'] * W_QUALITY
+【核心技能清单】
+- 详情：{job['skill_list'] if job['skill_list'] else '通用能力'}
 
-                final_score = score_b + score_s + score_q
+【专家分析报告】
+该岗位({name})要求专业技能分为 {job['professional_skill']}。
+核心考察：{job['skill_list'] if job['skill_list'] else '基础通用素质'}。
+################################################################
+"""
+                # 执行写入
+                file_path = os.path.join(txt_dir, f"job_{job['job_id']}.txt")
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(content.strip())
 
-                results.append({
-                    "岗位ID": job['job_id'],
-                    "竞争力得分": round(final_score, 2),
-                    "基础/技能/素质(原始)": f"{job['basic_requirement']}/{job['professional_skill']}/{job['professional_quality']}",
-                    "技能标签": job['skill_tags'] if job['skill_tags'] else "无标签数据"
-                })
+            # --- 3. 导出 CSV (用于上传 RagFlow Table 模式) ---
+            print("正在同步导出 CSV 数据表...")
+            # 导出带名称的画像全表
+            df_portrait = pd.read_sql(
+                "SELECT p.*, ji.job_name FROM job_portrait p LEFT JOIN job_info ji ON p.job_id = ji.id", conn)
+            df_portrait.to_csv(os.path.join(csv_dir, "job_portrait_data.csv"), index=False, encoding='utf-8-sig')
 
-            # 排序
-            df = pd.DataFrame(results).sort_values(by="竞争力得分", ascending=False)
-            return df
+            # 导出原始 job_info 全表 (即你说的“原件”)
+            df_info = pd.read_sql("SELECT * FROM job_info", conn)
+            df_info.to_csv(os.path.join(csv_dir, "job_info_original.csv"), index=False, encoding='utf-8-sig')
 
+            print("✅ 全部生成成功！")
+
+    except Exception as e:
+        print(f"❌ 运行出错: {e}")
     finally:
         conn.close()
+        print("Info: 数据库连接已安全关闭")
 
 
-# --- 模拟运行 ---
-# 假设 RagFlow 对学生简历的评估结果
-student_eval = {
-    'base_match': 1.2,  # 学历或经验超标
-    'skill_depth': 1.5,  # 技术极其资深
-    'quality_match': 1.0  # 素质匹配一般
-}
-
-recommend_df = get_job_recommendations(student_eval)
-
-print("=== 基于 Job_Portrait 的匹配结果（前5名） ===")
-print(recommend_df.head(5))
+if __name__ == "__main__":
+    export_all_for_ragflow()

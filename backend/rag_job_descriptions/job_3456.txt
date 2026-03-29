@@ -1,0 +1,15 @@
+岗位识别码：ID_3456
+【官方岗位名称】：前端开发
+
+【A13 维度画像数据】
+- 基础评分：7
+- 专业评分：63
+- 素质评分：0
+
+【核心技能清单】
+- 详情：3年以上工作经验、Angular、CSS、Git、HTML、Java、JavaScript、Linux、Nginx、Node、Python、React、Vue、开发、本科、维护、设计
+
+【专家分析报告】
+该岗位(前端开发)要求专业技能分为 63。
+核心考察：3年以上工作经验、Angular、CSS、Git、HTML、Java、JavaScript、Linux、Nginx、Node、Python、React、Vue、开发、本科、维护、设计。
+################################################################

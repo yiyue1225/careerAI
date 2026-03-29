@@ -1,0 +1,15 @@
+岗位识别码：ID_1767
+【官方岗位名称】：Java
+
+【A13 维度画像数据】
+- 基础评分：0
+- 专业评分：50
+- 素质评分：0
+
+【核心技能清单】
+- 详情：Angular、Java、MyBatis、MySQL、React、Redis、Spring、SQL、Vue、开发、日语N2
+
+【专家分析报告】
+该岗位(Java)要求专业技能分为 50。
+核心考察：Angular、Java、MyBatis、MySQL、React、Redis、Spring、SQL、Vue、开发、日语N2。
+################################################################
