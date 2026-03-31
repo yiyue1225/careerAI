@@ -1,15 +1,15 @@
 岗位识别码：ID_1519
-【官方岗位名称】：C/C++
+【官方岗位名称】：Java
 
 【A13 维度画像数据】
-- 基础评分：5
-- 专业评分：55
-- 素质评分：10
+- 基础评分：2
+- 专业评分：21
+- 素质评分：1
 
 【核心技能清单】
-- 详情：C++、Linux、MySQL、Oracle、Python、Shell、SQL、团队协作、学习能力、开发、本科、测试、系统设计、设计、逻辑思维、需求分析
+- 详情：CSS、HTML、Java、JavaScript、MySQL、Oracle、Spring、SpringBoot、SQL、Vue、团队合作、开发、文档编写、本科、设计
 
 【专家分析报告】
-该岗位(C/C++)要求专业技能分为 55。
-核心考察：C++、Linux、MySQL、Oracle、Python、Shell、SQL、团队协作、学习能力、开发、本科、测试、系统设计、设计、逻辑思维、需求分析。
+该岗位(Java)要求专业技能分为 21。
+核心考察：CSS、HTML、Java、JavaScript、MySQL、Oracle、Spring、SpringBoot、SQL、Vue、团队合作、开发、文档编写、本科、设计。
 ################################################################

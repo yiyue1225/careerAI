@@ -3,13 +3,13 @@
 
 【A13 维度画像数据】
 - 基础评分：0
-- 专业评分：50
-- 素质评分：0
+- 专业评分：8
+- 素质评分：1
 
 【核心技能清单】
-- 详情：Java、JavaScript、MyBatis、React、Spring、SpringBoot、Vue、大数据、开发、性能优化、数据分析、架构
+- 详情：CSS、HTML、Java、JavaScript、团队合作、开发、维护
 
 【专家分析报告】
-该岗位(前端开发)要求专业技能分为 50。
-核心考察：Java、JavaScript、MyBatis、React、Spring、SpringBoot、Vue、大数据、开发、性能优化、数据分析、架构。
+该岗位(前端开发)要求专业技能分为 8。
+核心考察：CSS、HTML、Java、JavaScript、团队合作、开发、维护。
 ################################################################

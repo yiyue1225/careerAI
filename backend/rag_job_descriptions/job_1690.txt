@@ -3,13 +3,13 @@
 
 【A13 维度画像数据】
 - 基础评分：0
-- 专业评分：54
+- 专业评分：14
 - 素质评分：0
 
 【核心技能清单】
-- 详情：C++、Go、Java、Linux、MySQL、Python、Redis、Spring、SQL、开发、微服务、设计
+- 详情：Hibernate、Java、Kafka、MyBatis、Spring、开发、测试、系统设计、设计、需求分析
 
 【专家分析报告】
-该岗位(Java)要求专业技能分为 54。
-核心考察：C++、Go、Java、Linux、MySQL、Python、Redis、Spring、SQL、开发、微服务、设计。
+该岗位(Java)要求专业技能分为 14。
+核心考察：Hibernate、Java、Kafka、MyBatis、Spring、开发、测试、系统设计、设计、需求分析。
 ################################################################

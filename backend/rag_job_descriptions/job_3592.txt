@@ -3,13 +3,13 @@
 
 【A13 维度画像数据】
 - 基础评分：0
-- 专业评分：40
+- 专业评分：17
 - 素质评分：0
 
 【核心技能清单】
-- 详情：CSS、HTML、Java、JavaScript、MySQL、Spring、SQL、开发、维护、设计
+- 详情：CSS、HTML、Java、JavaScript、MySQL、Oracle、Spring、SQL、开发、维护、设计
 
 【专家分析报告】
-该岗位(Java)要求专业技能分为 40。
-核心考察：CSS、HTML、Java、JavaScript、MySQL、Spring、SQL、开发、维护、设计。
+该岗位(Java)要求专业技能分为 17。
+核心考察：CSS、HTML、Java、JavaScript、MySQL、Oracle、Spring、SQL、开发、维护、设计。
 ################################################################

@@ -72,13 +72,10 @@ def export_all_for_ragflow():
             # --- 3. 导出 CSV (用于上传 RagFlow Table 模式) ---
             print("正在同步导出 CSV 数据表...")
             # 导出带名称的画像全表
-            df_portrait = pd.read_sql(
-                "SELECT p.*, ji.job_name FROM job_portrait p LEFT JOIN job_info ji ON p.job_id = ji.id", conn)
-            df_portrait.to_csv(os.path.join(csv_dir, "job_portrait_data.csv"), index=False, encoding='utf-8-sig')
+
 
             # 导出原始 job_info 全表 (即你说的“原件”)
-            df_info = pd.read_sql("SELECT * FROM job_info", conn)
-            df_info.to_csv(os.path.join(csv_dir, "job_info_original.csv"), index=False, encoding='utf-8-sig')
+
 
             # --- 步骤 C: 导出业务逻辑原件 ---
             print("📊 正在导出业务权重与字典原件...")
@@ -92,9 +89,6 @@ def export_all_for_ragflow():
                 os.path.join(csv_dir, "skill_dictionary.csv"), index=False, encoding='utf-8-sig')
 
             # 3. 导出标准岗位对照表
-            pd.read_sql("SELECT * FROM job_standard_profile", conn).to_csv(
-                os.path.join(csv_dir, "standard_job_map.csv"), index=False, encoding='utf-8-sig')
-
             print(" 业务原件导出成功！")
             print(" 全部生成成功！")
 

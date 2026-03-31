@@ -3,13 +3,13 @@
 
 【A13 维度画像数据】
 - 基础评分：0
-- 专业评分：83
-- 素质评分：7
+- 专业评分：3
+- 素质评分：0
 
 【核心技能清单】
-- 详情：C#、CSS、Docker、Git、Go、HTML、Java、JavaScript、Linux、MongoDB、MySQL、Node、Node.js、Redis、Shell、SQL、实施、客户服务意识、开发、文档编写、维护、责任心
+- 详情：技术支持、维护、部署
 
 【专家分析报告】
-该岗位(实施工程师)要求专业技能分为 83。
-核心考察：C#、CSS、Docker、Git、Go、HTML、Java、JavaScript、Linux、MongoDB、MySQL、Node、Node.js、Redis、Shell、SQL、实施、客户服务意识、开发、文档编写、维护、责任心。
+该岗位(实施工程师)要求专业技能分为 3。
+核心考察：技术支持、维护、部署。
 ################################################################

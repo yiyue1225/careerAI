@@ -1,15 +1,15 @@
 岗位识别码：ID_427
-【官方岗位名称】：前端开发
+【官方岗位名称】：Java
 
 【A13 维度画像数据】
 - 基础评分：0
-- 专业评分：37
-- 素质评分：10
+- 专业评分：21
+- 素质评分：3
 
 【核心技能清单】
-- 详情：CSS、HTML、Java、JavaScript、React、Vue、Vue3、学习能力、开发、自我驱动、设计
+- 详情：C++、Docker、Java、Kubernetes、MySQL、Oracle、Python、Spring、SQL、团队协作、学习能力、开发、微服务
 
 【专家分析报告】
-该岗位(前端开发)要求专业技能分为 37。
-核心考察：CSS、HTML、Java、JavaScript、React、Vue、Vue3、学习能力、开发、自我驱动、设计。
+该岗位(Java)要求专业技能分为 21。
+核心考察：C++、Docker、Java、Kubernetes、MySQL、Oracle、Python、Spring、SQL、团队协作、学习能力、开发、微服务。
 ################################################################
