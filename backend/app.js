@@ -1,58 +1,46 @@
-const express = require('express'); 
-const axios = require('axios');
+const express = require('express');
 const cors = require('cors');
-require('dotenv').config(); 
+const axios = require('axios'); // 留着以后调 Dify 用
+require('dotenv').config();    // 留着读取 API Key 用
 
 const app = express();
 
-app.use(cors()); 
-app.use(express.json()); 
+// --- 中间件配置 ---
+app.use(cors());              // 开启跨域，允许 Vue 访问
+app.use(express.json());      // 允许后端接收前端发来的 JSON 数据
 
 
+// --- API 路由 ---
 
-app.get('/analyze-test', (req, res) => {
-
-    const studentName = "小明"; 
-    
-    const scores = {
-        basic: 85,      // 基础要求
-        skill: 90,      // 职业技能
-        soft: 80,       // 职业素养
-        potential: 95   // 发展潜力
-    };
-
-    res.json({
-        message: `你好 ${studentName}，你的 A13 职业规划报告已生成！`,
-        data: scores,
-        status: "success"
-    });
-});
-
-
-const PORT = 3000;
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`转接头已启动：请访问 http://172.27.148.3:${PORT}/test`);
-});
-
-
-
-// 请求 Dify 知识库中的数据
-const mockPositions = [
-    {
-        id: "1",
-        name: "后端开发工程师",
-        company: "某大厂",
-        location: "杭州",
-        salary: "20k-30k",
-        industry: "互联网",
-        requirements: { professionalSkills: ["Java", "Node.js", "MySQL", "Redis"] },
-        dimensions: { professional: 90, certificate: 80, innovation: 70, learning: 85, stress: 90, communication: 75, internship: 80 }
-    }
-];
-
-
+// 1. 测试接口：岗位列表
 app.get('/api/positions', (req, res) => {
-    // A13 赛题：这里可以加入筛选逻辑
-    console.log("前端正在请求岗位列表...");
-    res.json(mockPositions); 
+  try {
+    // 这里的字段名（name, city, salary）必须和 Vue 模板里的 {{ item.xxx }} 一致
+    const data = [
+      { id: 1, name: 'AI 算法工程师', category: '技术', city: '北京', salary: '30k', industry: '人工智能' },
+      { id: 2, name: '产品经理', category: '产品', city: '上海', salary: '20k', industry: '互联网' },
+      { id: 3, name: '嵌入式开发', category: '硬件', city: '深圳', salary: '18k', industry: '智能硬件' }
+    ];
+    console.log('📅 收到前端请求：返回了', data.length, '条岗位数据');
+    res.json(data); 
+  } catch (error) {
+    console.error('后端报错:', error);
+    res.status(500).json({ message: "后端数据处理异常" });
+  }
+});
+
+// 2. 预留：AI 测评接口（A13 赛题核心）
+app.post('/api/analyze', (req, res) => {
+    // 这里以后写调用 Dify 的逻辑
+    res.json({ message: "收到简历，正在分析..." });
+});
+
+// --- 启动服务器 ---
+const PORT = 3000;
+app.listen(PORT, () => {
+  console.log(`-----------------------------------------`);
+  console.log(`A13 后端转接头启动成功！`);
+  console.log(`本地访问地址: http://localhost:${PORT}`);
+  console.log(`API 测试地址: http://localhost:${PORT}/api/positions`);
+  console.log(`-----------------------------------------`);
 });
