@@ -19,4 +19,13 @@ export default defineConfig({
       '@': '/src',
     },
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://172.27.148.3:3000', // 后端实际地址
+        changeOrigin: true,
+        // rewrite: (path) => path.replace(/^\/api/, '') // 如果后端接口不带 /api 前缀，取消注释
+      },
+    },
+  },
 })

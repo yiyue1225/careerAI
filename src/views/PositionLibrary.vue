@@ -89,13 +89,18 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
+import axios from 'axios'
+import { ElMessage } from 'element-plus'
 import { Search, PieChart, ArrowRight } from '@element-plus/icons-vue'
-import { positions } from '@/mock/positions'
 import { useUserStore } from '@/store'
 
 const router = useRouter()
 const userStore = useUserStore()
 const studentProfile = userStore.studentProfile
+
+// 数据状态
+const positions = ref<any[]>([])       // 原始岗位数据
+const loading = ref(false)              // 加载状态
 
 // 筛选条件
 const search = ref('')
@@ -103,37 +108,36 @@ const selectedIndustry = ref('')
 const selectedCity = ref('')
 const selectedSalary = ref('')
 const currentPage = ref(1)
-const pageSize = 9 // 每页显示9个岗位
+const pageSize = 9
 
-// 提取所有行业和城市用于下拉框
+// 动态行业、城市（从实际数据中提取）
 const industries = computed(() => {
-  const set = new Set(positions.map(p => p.industry))
+  const set = new Set(positions.value.map(p => p.industry))
   return Array.from(set)
 })
 const cities = computed(() => {
-  const set = new Set(positions.map(p => p.location))
+  const set = new Set(positions.value.map(p => p.location))
   return Array.from(set)
 })
 
-// 为每个岗位计算匹配度（如果有学生数据）
+// 为每个岗位计算匹配度（基于学生画像）
 const positionsWithMatch = computed(() => {
-  if (!studentProfile) return positions
-  return positions.map(pos => {
-    // 简单计算：取各维度差值平均的百分比，这里仅作示意
+  if (!studentProfile) return positions.value
+  return positions.value.map(pos => {
     const dims = ['professional', 'certificate', 'innovation', 'learning', 'stress', 'communication', 'internship']
     let totalGap = 0
     dims.forEach(d => {
       const studentVal = studentProfile.dimensions[d as keyof typeof studentProfile.dimensions] || 0
-      const posVal = pos.dimensions[d as keyof typeof pos.dimensions] || 0
+      const posVal = pos.dimensions?.[d as keyof typeof pos.dimensions] || 0
       totalGap += Math.abs(studentVal - posVal)
     })
     const avgGap = totalGap / dims.length
-    const match = Math.max(0, Math.min(100, 100 - avgGap)).toFixed(0)
-    return { ...pos, matchLevel: parseInt(match) }
+    const match = Math.max(0, Math.min(100, 100 - avgGap))
+    return { ...pos, matchLevel: Math.round(match) }
   })
 })
 
-// 过滤后的岗位
+// 过滤后的岗位（前端过滤，适用于数据量不大时）
 const filtered = computed(() => {
   let list = positionsWithMatch.value
   if (search.value) {
@@ -146,10 +150,9 @@ const filtered = computed(() => {
     list = list.filter(p => p.location === selectedCity.value)
   }
   if (selectedSalary.value) {
-    // 简单解析薪资范围，仅作演示
     const [min, max] = selectedSalary.value.split('-').map(Number)
     list = list.filter(p => {
-      const salaryNum = parseInt(p.salary.split('-')[0]) // 取最低薪资
+      const salaryNum = parseInt(p.salary.split('-')[0])
       if (selectedSalary.value === '30+') return salaryNum >= 30
       if (max) return salaryNum >= min && salaryNum <= max
       return salaryNum >= min
@@ -165,14 +168,14 @@ const filteredPositions = computed(() => {
 })
 const totalPositions = computed(() => filtered.value.length)
 
-// 获取匹配度标签颜色
+// 匹配度标签颜色
 const getMatchLevelTag = (level: number) => {
   if (level >= 80) return 'success'
   if (level >= 60) return 'warning'
   return 'danger'
 }
 
-// 应用筛选（重置到第一页）
+// 筛选操作（重置页码）
 const applyFilter = () => {
   currentPage.value = 1
 }
@@ -188,14 +191,15 @@ const goToDetail = (id: string) => {
   router.push(`/position/${id}`)
 }
 
-// 饼图初始化
+// 饼图相关
 const pieChartRef = ref<HTMLElement>()
 let pieChart: echarts.ECharts | null = null
 
 const initPieChart = () => {
   if (!pieChartRef.value) return
+  if (!positions.value.length) return  // 无数据时不渲染
   pieChart = echarts.init(pieChartRef.value)
-  const industryCount = positions.reduce((acc, cur) => {
+  const industryCount = positions.value.reduce((acc, cur) => {
     acc[cur.industry] = (acc[cur.industry] || 0) + 1
     return acc
   }, {} as Record<string, number>)
@@ -221,8 +225,31 @@ const initPieChart = () => {
 
 const handleResize = () => pieChart?.resize()
 
+// 获取后端数据
+const fetchPositions = async () => {
+  loading.value = true
+  try {
+    // 后端接口地址（可根据环境变量配置）
+    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://172.27.148.3:3000'
+    const response = await axios.get(`${baseURL}/api/positions`)
+    // 假设后端返回格式为 { code: 0, data: [...] }
+    if (response.data.code === 0) {
+      positions.value = response.data.data
+      // 数据加载完成后重新绘制饼图
+      initPieChart()
+    } else {
+      ElMessage.error(response.data.message || '获取岗位数据失败')
+    }
+  } catch (error) {
+    console.error('请求岗位数据失败:', error)
+    ElMessage.error('无法连接后端服务，请检查网络或联系管理员')
+  } finally {
+    loading.value = false
+  }
+}
+
 onMounted(() => {
-  initPieChart()
+  fetchPositions()
   window.addEventListener('resize', handleResize)
 })
 
