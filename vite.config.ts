@@ -22,7 +22,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://172.27.148.3:3000', // 后端实际地址
+        target: 'http://127.0.0.1:3000', // 后端实际地址
         changeOrigin: true,
         // rewrite: (path) => path.replace(/^\/api/, '') // 如果后端接口不带 /api 前缀，取消注释
       },

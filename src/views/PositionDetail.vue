@@ -31,32 +31,74 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue' // 引入 watch 和 ref
 import { useRoute } from 'vue-router'
-import { positions } from '@/mock/positions'
+import axios from 'axios'
 import { graphData } from '@/mock/graph'
 import RadarChart from '@/components/RadarChart.vue'
 import RelationGraph from '@/components/RelationGraph.vue'
 
 const route = useRoute()
-const position = positions.find(p => p.id === route.params.id)
+const position = ref<any>(null) 
+
+// 封装获取详情的方法
+const fetchDetail = async () => {
+  try {
+    // 保持和列表页一样的 baseURL 逻辑
+    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+    const res = await axios.get(`${baseURL}/api/positions`)
+    
+    if (res.data.code === 0) {
+      // 从后端返回的数组中匹配当前 ID
+      const target = res.data.data.find((p: any) => String(p.id) === String(route.params.id))
+      if (target) {
+        position.value = target
+      } else {
+        console.error("未找到该岗位详情")
+      }
+    }
+  } catch (error) {
+    console.error("获取详情失败:", error)
+  }
+}
+
+// 当你从一个岗位跳到另一个岗位时，这个监听能确保页面刷新
+watch(() => route.params.id, () => {
+  fetchDetail()
+}, { immediate: true })
 
 const radarData = computed(() => {
-  if (!position) return { indicator: [], series: [] }
-  const dims = position.dimensions
+  // 增加严谨判断，防止后端数据缺失 dimensions 导致报错
+  if (!position.value || !position.value.dimensions) return { indicator: [], series: [] }
+  
+  const dims = position.value.dimensions
   return {
     indicator: [
       { name: '专业技能', max: 100 },
-      { name: '证书', max: 100 },
+      { name: '证书要求', max: 100 },
       { name: '创新能力', max: 100 },
       { name: '学习能力', max: 100 },
       { name: '抗压能力', max: 100 },
       { name: '沟通能力', max: 100 },
       { name: '实习经验', max: 100 },
     ],
-    series: [{ name: position.name, value: Object.values(dims) }],
+
+
+    series: [{ 
+      name: position.value.name, 
+      value: [
+        dims.professional || 0,
+        dims.certificate || 0,
+        dims.innovation || 0,
+        dims.learning || 0,
+        dims.stress || 0,
+        dims.communication || 0,
+        dims.internship || 0
+      ] 
+    }],
   }
 })
 
-const graph = graphData // 实际应根据岗位ID筛选，这里用全局mock
+const graph = graphData
+</script>
 </script>
