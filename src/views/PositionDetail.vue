@@ -101,4 +101,3 @@ const radarData = computed(() => {
 
 const graph = graphData
 </script>
-</script>
