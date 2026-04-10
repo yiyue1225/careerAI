@@ -1,37 +1,92 @@
 <template>
   <div v-if="position" class="position-detail">
     <el-page-header @back="$router.back()" content="岗位详情" />
-    <el-card class="detail-card">
-      <h2>{{ position.name }}</h2>
-      <p>{{ position.company }} | {{ position.industry }} | {{ position.location }}</p>
-      <p class="salary">{{ position.salary }}</p>
+
+    <el-card class="detail-card" v-loading="!position.name">
+      <div class="header-section">
+        <h2>{{ position.name || '加载中...' }}</h2>
+        <p class="info-text">
+          {{ position.company || '未知公司' }} | 
+          {{ position.industry || '未知行业' }} | 
+          {{ position.location || '未知地点' }}
+        </p>
+        <p class="salary">{{ position.salary || '薪资面议' }}</p>
+      </div>
+
       <el-divider />
-      <h3>岗位描述</h3>
-      <p>{{ position.description }}</p>
-      <h3>任职要求</h3>
-      <el-descriptions :column="2" border>
-        <el-descriptions-item label="专业技能">
-          <el-tag v-for="s in position.requirements.professionalSkills" :key="s">{{ s }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="证书要求">
-          {{ position.requirements.certificates.join('、') || '无' }}
-        </el-descriptions-item>
-        <el-descriptions-item label="创新能力">{{ position.requirements.innovation }} /5</el-descriptions-item>
-        <el-descriptions-item label="学习能力">{{ position.requirements.learningAbility }} /5</el-descriptions-item>
-        <el-descriptions-item label="抗压能力">{{ position.requirements.stressTolerance }} /5</el-descriptions-item>
-        <el-descriptions-item label="沟通能力">{{ position.requirements.communication }} /5</el-descriptions-item>
-        <el-descriptions-item label="实习经验">{{ position.requirements.internship.join('；') }}</el-descriptions-item>
-      </el-descriptions>
-      <h3>能力要求雷达图</h3>
-      <RadarChart :data="radarData" />
-      <h3>岗位关联图谱</h3>
-      <RelationGraph :nodes="graph.nodes" :links="graph.links" />
+
+      <section class="info-block">
+        <h3>岗位描述</h3>
+        <p class="desc-content">{{ position.description || '暂无详细描述' }}</p>
+      </section>
+
+      <section class="info-block">
+        <h3>任职要求</h3>
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="专业技能">
+            <template v-if="position.requirements?.professionalSkills?.length">
+              <el-tag 
+                v-for="s in position.requirements.professionalSkills" 
+                :key="s" 
+                class="skill-tag"
+              >
+                {{ s }}
+              </el-tag>
+            </template>
+            <span v-else class="text-secondary">暂无具体技能要求</span>
+          </el-descriptions-item>
+
+          <el-descriptions-item label="证书要求">
+            {{ position.requirements?.certificates?.join('、') || '无' }}
+          </el-descriptions-item>
+
+          <el-descriptions-item label="创新能力">
+            {{ position.requirements?.innovation ?? 0 }} / 5
+          </el-descriptions-item>
+          
+          <el-descriptions-item label="学习能力">
+            {{ position.requirements?.learningAbility ?? 0 }} / 5
+          </el-descriptions-item>
+          
+          <el-descriptions-item label="抗压能力">
+            {{ position.requirements?.stressTolerance ?? 0 }} / 5
+          </el-descriptions-item>
+          
+          <el-descriptions-item label="沟通能力">
+            {{ position.requirements?.communication ?? 0 }} / 5
+          </el-descriptions-item>
+
+          <el-descriptions-item label="实习经验" :span="2">
+            {{ position.requirements?.internship?.join('；') || '无要求' }}
+          </el-descriptions-item>
+        </el-descriptions>
+      </section>
+
+      <el-row :gutter="20" class="charts-section">
+        <el-col :span="12">
+          <h3>能力要求雷达图</h3>
+          <div class="chart-container">
+            <RadarChart :data="radarData" />
+          </div>
+        </el-col>
+        <el-col :span="12">
+          <h3>岗位关联图谱</h3>
+          <div class="chart-container">
+            <RelationGraph :nodes="graph.nodes" :links="graph.links" />
+          </div>
+        </el-col>
+      </el-row>
+      
+      <div class="footer-actions">
+        <el-button type="primary" size="large" @click="$router.push('/match')">开始人岗匹配</el-button>
+        <el-button link @click="$router.back()">返回列表</el-button>
+      </div>
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue' // 引入 watch 和 ref
+import { ref, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
 import { graphData } from '@/mock/graph'
@@ -39,22 +94,34 @@ import RadarChart from '@/components/RadarChart.vue'
 import RelationGraph from '@/components/RelationGraph.vue'
 
 const route = useRoute()
-const position = ref<any>(null) 
 
-// 封装获取详情的方法
+// 1. 初始化一个结构完整的对象，避免初次渲染时访问深度属性报错
+const position = ref<any>({
+  name: '',
+  company: '',
+  requirements: {
+    professionalSkills: [],
+    certificates: [],
+    internship: []
+  },
+  dimensions: {}
+})
+
+// 获取详情的方法
 const fetchDetail = async () => {
   try {
-    // 保持和列表页一样的 baseURL 逻辑
     const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
     const res = await axios.get(`${baseURL}/api/positions`)
     
     if (res.data.code === 0) {
-      // 从后端返回的数组中匹配当前 ID
       const target = res.data.data.find((p: any) => String(p.id) === String(route.params.id))
       if (target) {
-        position.value = target
-      } else {
-        console.error("未找到该岗位详情")
+        // 合并数据，确保即使后端漏了字段，基础结构还在
+        position.value = {
+          ...target,
+          requirements: target.requirements || { professionalSkills: [], certificates: [], internship: [] },
+          dimensions: target.dimensions || {}
+        }
       }
     }
   } catch (error) {
@@ -62,42 +129,116 @@ const fetchDetail = async () => {
   }
 }
 
-// 当你从一个岗位跳到另一个岗位时，这个监听能确保页面刷新
-watch(() => route.params.id, () => {
-  fetchDetail()
+// 监听路由参数变化
+watch(() => route.params.id, (newId) => {
+  if (newId) fetchDetail()
 }, { immediate: true })
 
+
 const radarData = computed(() => {
-  // 增加严谨判断，防止后端数据缺失 dimensions 导致报错
-  if (!position.value || !position.value.dimensions) return { indicator: [], series: [] }
-  
-  const dims = position.value.dimensions
+  const d = position.value?.dimensions || {}
   return {
     indicator: [
-      { name: '专业技能', max: 100 },
-      { name: '证书要求', max: 100 },
-      { name: '创新能力', max: 100 },
-      { name: '学习能力', max: 100 },
-      { name: '抗压能力', max: 100 },
-      { name: '沟通能力', max: 100 },
-      { name: '实习经验', max: 100 },
+      { name: '专业技能', max: 100 }, // 对应 d.professional
+      { name: '证书要求', max: 100 }, // 对应 d.certificate
+      { name: '创新能力', max: 100 }, // 对应 d.innovation
+      { name: '学习能力', max: 100 }, // 对应 d.learning
+      { name: '抗压能力', max: 100 }, // 对应 d.stress
+      { name: '沟通能力', max: 100 }, // 对应 d.communication
+      { name: '实习经验', max: 100 }  // 对应 d.internship
     ],
-
-
-    series: [{ 
-      name: position.value.name, 
-      value: [
-        dims.professional || 0,
-        dims.certificate || 0,
-        dims.innovation || 0,
-        dims.learning || 0,
-        dims.stress || 0,
-        dims.communication || 0,
-        dims.internship || 0
-      ] 
-    }],
+    series: [{
+      name: '能力画像',
+      type: 'radar',
+      // 这个数组的数值顺序必须和上面的 indicator 顺序完全一致！
+      data: [[
+        d.professional || 0,
+        d.certificate || 0,
+        d.innovation || 0,
+        d.learning || 0,
+        d.stress || 0,
+        d.communication || 0,
+        d.internship || 0
+      ]]
+    }]
   }
 })
 
-const graph = graphData
+const graph = computed(() => {
+  const currentName = position.value?.name || '未知岗位';
+  
+  // 基础节点：中心是当前岗位，周围是核心维度
+  return {
+    nodes: [
+      { id: '0', name: currentName, symbolSize: 80, itemStyle: { color: '#409EFF' } },
+      { id: '1', name: '专业背景', symbolSize: 50 },
+      { id: '2', name: '核心技能', symbolSize: 50 },
+      { id: '3', name: '行业领域', symbolSize: 50 },
+      { id: '4', name: '发展空间', symbolSize: 50 },
+    ],
+    links: [
+      { source: '0', target: '1' },
+      { source: '0', target: '2' },
+      { source: '0', target: '3' },
+      { source: '0', target: '4' },
+    ]
+  };
+});
 </script>
+
+<style scoped>
+.position-detail {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.detail-card {
+  margin-top: 20px;
+  border-radius: 12px;
+}
+.salary {
+  font-size: 24px;
+  color: #f56c6c;
+  font-weight: bold;
+  margin: 10px 0;
+}
+.info-text {
+  color: #606266;
+}
+.info-block {
+  margin-bottom: 30px;
+}
+.desc-content {
+  line-height: 1.8;
+  color: #303133;
+  white-space: pre-wrap;
+}
+.skill-tag {
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
+.charts-section {
+  margin-top: 40px;
+}
+.chart-container {
+  height: 400px;
+  background: #fcfcfc;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.footer-actions {
+  margin-top: 40px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+.text-secondary {
+  color: #909399;
+  font-style: italic;
+}
+</style>

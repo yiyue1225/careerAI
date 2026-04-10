@@ -229,25 +229,19 @@ const handleResize = () => pieChart?.resize()
 const fetchPositions = async () => {
   loading.value = true
   try {
-    // 后端接口地址（可根据环境变量配置）
-    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://172.27.148.3:3000'
-    const response = await axios.get(`${baseURL}/api/positions`)
-    // 假设后端返回格式为 { code: 0, data: [...] }
+    
+    const response = await axios.get('/api/positions') 
+    
     if (response.data.code === 0) {
       positions.value = response.data.data
-      // 数据加载完成后重新绘制饼图
       initPieChart()
-    } else {
-      ElMessage.error(response.data.message || '获取岗位数据失败')
     }
   } catch (error) {
-    console.error('请求岗位数据失败:', error)
-    ElMessage.error('无法连接后端服务，请检查网络或联系管理员')
+    console.error('请求失败', error)
   } finally {
     loading.value = false
   }
 }
-
 onMounted(() => {
   fetchPositions()
   window.addEventListener('resize', handleResize)
