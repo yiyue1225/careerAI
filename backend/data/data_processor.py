@@ -10,8 +10,9 @@ env_path = os.path.join(os.path.dirname(__file__), '..', '.env')
 load_dotenv(dotenv_path=env_path)
 
 # 从 .env 读取配置
-DIFY_API_KEY = os.getenv('DIFY_API_KEY')
-DIFY_BASE_URL = os.getenv('DIFY_API_URL')  # 确保是 http://ip:port/v1
+DIFY_API_KEY = os.getenv('DIFY_API_KEY_EXTRACT_JOB_INFO')
+DIFY_BASE_URL = os.getenv('DIFY_API_URL')
+DIFY_API_URL = f"{DIFY_BASE_URL}/chat-messages"
 DB_CONFIG = {
     "host": os.getenv('DB_HOST'),
     "user": os.getenv('DB_USER'),
@@ -69,49 +70,85 @@ def get_ai_analysis(title, desc):
         return None
 
 
+def extract_job_requirements(title, min_s, max_s, desc):
+    # 1. 确保 url 在这里被定义
+    target_url = f"{DIFY_BASE_URL}/chat-messages"
+
+    headers = {
+        "Authorization": f"Bearer {DIFY_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    salary_str = f"{min_s}k - {max_s}k" if min_s and max_s else "面议"
+
+    payload = {
+        "inputs": {
+            "job_title": title,
+            "salary": salary_str,
+            "job_description": desc[:1200]
+        },
+        "query": "请开始提取",
+        "response_mode": "blocking",
+        "user": "tag_filler"
+    }
+
+    try:
+        # 2. 这里的第一个参数必须和上面定义的变量名一致
+        response = requests.post(
+            target_url,  # 👈 确保这里叫 target_url (或者都叫 url)
+            json=payload,
+            headers=headers,
+            timeout=30,
+            proxies={"http": None, "https": None}
+        )
+
+        if response.status_code != 200:
+            return None
+
+        answer = response.json().get('answer', '')
+        json_match = re.search(r'\{.*\}', answer, re.DOTALL)
+        return json.loads(json_match.group()) if json_match else None
+    except Exception as e:
+        # 打印具体的报错，方便我们调试
+        print(f"❌ 提取解析内部异常: {e}")
+        return None
+
 def main():
-    # 2. 连接数据库
     connection = pymysql.connect(**DB_CONFIG)
     try:
         with connection.cursor() as cursor:
-            # 修改点 1: 查询清洗后的新表 job_standard_profile
-            # 只处理 pro_score 为 0 (未标注) 的数据
-            sql_select = "SELECT id, job_name, full_detail FROM job_standard_profile WHERE pro_score = 0"
+            # 这里的逻辑：分数已经跑完了（>0），但标签还没跑的（NULL）
+            sql_select = """
+                         SELECT id, job_name, min_salary_k, max_salary_k, full_detail
+                         FROM job_standard_profile
+                         WHERE pro_score > 0 \
+                           AND requirements IS NULL \
+                         """
             cursor.execute(sql_select)
             jobs = cursor.fetchall()
 
             if not jobs:
-                print("✨ 任务已全部完成！没有需要标注的数据。")
+                print("✨ 所有的 Requirements 标签已就绪，无需补全。")
                 return
 
-            print(f"🚀 正在为 {len(jobs)} 条清洗后的岗位生成画像...")
+            print(f"🚀 发现 {len(jobs)} 条待处理数据，开始提取标签...")
 
             for job in jobs:
-                # 修改点 2: 传入清洗后的 clean_detail
-                scores = get_ai_analysis(job['job_name'], job['full_detail'])
+                req_data = extract_job_requirements(
+                    job['job_name'],
+                    job['min_salary_k'],
+                    job['max_salary_k'],
+                    job['full_detail']
+                )
 
-                if scores:
-                    # 修改点 3: 更新到 job_standard_profile 表
-                    sql_update = """
-                                 UPDATE job_standard_profile \
-                                 SET pro_score=%s, \
-                                     inn_score=%s, \
-                                     lea_score=%s, \
-                                     str_score=%s, \
-                                     com_score=%s, \
-                                     cer_score=%s, \
-                                     int_score=%s
-                                 WHERE id = %s \
-                                 """
-                    cursor.execute(sql_update, (
-                        scores.get('pro', 0), scores.get('inn', 0), scores.get('lea', 0),
-                        scores.get('str', 0), scores.get('com', 0), scores.get('cer', 0),
-                        scores.get('int', 0), job['id']
-                    ))
+                if req_data:
+                    sql_update = "UPDATE job_standard_profile SET requirements = %s WHERE id = %s"
+                    cursor.execute(sql_update, (json.dumps(req_data, ensure_ascii=False), job['id']))
                     connection.commit()
-                    print(f"✅ 画像同步成功: {job['job_name']} (ID: {job['id']})")
+                    print(f"✅ ID {job['id']} ({job['job_name']}) 标签补全成功")
                 else:
-                    print(f"⚠️ 跳过 ID {job['id']}, AI 未返回有效 JSON")
+                    print(f"⚠️ ID {job['id']} 提取失败，可能是AI输出格式不对")
+
 
     finally:
         connection.close()
