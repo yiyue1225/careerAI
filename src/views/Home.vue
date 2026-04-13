@@ -146,7 +146,7 @@ const initPieChart = async () => {
   if (!pieChartRef.value) return;
 
   try {
-    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    const baseURL = import.meta.env.VITE_API_BASE_URL ?? '';
     // 💡 获取 10,000 条岗位的真实统计 
     const res = await axios.get(`${baseURL}/api/industry-stats`);
     

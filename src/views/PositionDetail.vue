@@ -110,7 +110,7 @@ const position = ref<any>({
 // 获取详情的方法
 const fetchDetail = async () => {
   try {
-    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+    const baseURL = import.meta.env.VITE_API_BASE_URL ?? '';
     const res = await axios.get(`${baseURL}/api/positions`)
     
     if (res.data.code === 0) {
