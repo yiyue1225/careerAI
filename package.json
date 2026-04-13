@@ -6,8 +6,9 @@
   "scripts": {
     "dev:client": "vite",
     "dev:server": "npm run dev --prefix backend",
-    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\""
-  },
+    "dev": "concurrently \"npm run dev:client\" \"npm run dev:server\"",
+    "build": "vite build"
+},
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.14.0",

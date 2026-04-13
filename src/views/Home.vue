@@ -87,6 +87,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
 import { useRouter } from 'vue-router'
+import axios from 'axios'
 import {
   Briefcase,
   User,
@@ -141,36 +142,81 @@ let pieChart: echarts.ECharts | null = null
 let lineChart: echarts.ECharts | null = null
 
 // 初始化饼图（热门行业岗位分布）
-const initPieChart = () => {
-  if (!pieChartRef.value) return
-  pieChart = echarts.init(pieChartRef.value)
-  const option = {
-    tooltip: { trigger: 'item' },
-    legend: { orient: 'vertical', left: 'left' },
-    series: [
-      {
-        name: '岗位分布',
-        type: 'pie',
-        radius: '50%',
-        data: [
-          { value: 320, name: '互联网/IT' },
-          { value: 240, name: '人工智能' },
-          { value: 180, name: '金融科技' },
-          { value: 120, name: '智能制造' },
-          { value: 80, name: '生物医药' },
-        ],
-        emphasis: {
-          itemStyle: {
-            shadowBlur: 10,
-            shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.5)',
-          },
+const initPieChart = async () => {
+  if (!pieChartRef.value) return;
+
+  try {
+    const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+    // 💡 获取 10,000 条岗位的真实统计 
+    const res = await axios.get(`${baseURL}/api/industry-stats`);
+    
+    if (res.data.code === 0 && res.data.data.length > 0) {
+      // 💡 确保容器已渲染，使用 nextTick 或直接初始化
+      pieChart = echarts.init(pieChartRef.value);
+      
+      const option: echarts.EChartsOption = {
+        // 💡 样式对齐：标题放在右下角，避免遮挡数据
+        title: {
+          text: '行业岗位分布统计',
+          right: '5%',
+          bottom: '5%',
+          textAlign: 'right',
+          textStyle: {
+            fontSize: 14,
+            fontWeight: 'bold',
+            color: '#606266'
+          }
         },
-      },
-    ],
+        tooltip: { 
+          trigger: 'item',
+          formatter: '{b}: {c} ({d}%)' 
+        },
+        legend: {
+          show: false // 首页保持简洁
+        },
+        series: [
+          {
+            name: '行业分布',
+            type: 'pie',
+            // 💡 样式对齐：环形比例 40%-70%
+            radius: ['40%', '70%'], 
+            avoidLabelOverlap: true,
+            // 💡 核心样式：圆角 8px 且带有白色描边
+            itemStyle: {
+              borderRadius: 8,
+              borderColor: '#fff',
+              borderWidth: 2
+            },
+            label: {
+              show: true,
+              position: 'outside',
+              formatter: '{b}',
+              color: '#606266'
+            },
+            labelLine: {
+              show: true,
+              length: 10,
+              length2: 15
+            },
+            data: res.data.data, 
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowOffsetX: 0,
+                shadowColor: 'rgba(0, 0, 0, 0.5)'
+              }
+            }
+          }
+        ]
+      };
+      pieChart.setOption(option);
+    } else {
+      console.warn("后端未返回有效的行业统计数据");
+    }
+  } catch (error) {
+    console.error("加载首页饼图失败:", error);
   }
-  pieChart.setOption(option)
-}
+};
 
 // 初始化折线图（AI相关岗位需求趋势）
 const initLineChart = () => {

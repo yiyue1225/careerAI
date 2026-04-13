@@ -252,7 +252,7 @@ const updateChart = (data: { name: string; value: number }[]) => {
   const option: echarts.EChartsOption = {
     title: {
     text: '行业岗位分布统计',
-    left: '50%',
+    left: '',
     top: '0%',
     textStyle: {
       fontSize: 16,
