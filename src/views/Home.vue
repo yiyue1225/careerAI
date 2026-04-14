@@ -102,13 +102,26 @@ import {
 
 const router = useRouter()
 
-// 统计数据（可改为从后端获取）
-const stats = [
-  { icon: Briefcase, value: '10,234', label: '岗位总数', color: '#409eff' },
+// 统计数据（岗位总数从后端获取）
+const stats = ref([
+  { icon: Briefcase, value: '加载中...', label: '岗位总数', color: '#409eff' },
   { icon: User, value: '5,678', label: '注册学生', color: '#67c23a' },
   { icon: DataLine, value: '85%', label: '匹配成功率', color: '#e6a23c' },
   { icon: Medal, value: '98%', label: '用户满意度', color: '#f56c6c' },
-]
+])
+
+const fetchStats = async () => {
+  try {
+    const baseURL = import.meta.env.VITE_API_BASE_URL ?? ''
+    const res = await axios.get(`${baseURL}/api/stats`)
+    if (res.data.code === 0) {
+      const { totalPositions, totalCities } = res.data.data
+      stats.value[0].value = Number(totalPositions).toLocaleString('zh-CN') + '+'
+    }
+  } catch (e) {
+    stats.value[0].value = '10,000+'
+  }
+}
 
 // AI功能卡片
 const aiFeatures = [
@@ -250,6 +263,7 @@ const handleResize = () => {
 }
 
 onMounted(() => {
+  fetchStats()
   initPieChart()
   initLineChart()
   window.addEventListener('resize', handleResize)
@@ -408,5 +422,46 @@ onUnmounted(() => {
 .quick-actions .el-button {
   padding: 15px 40px;
   font-size: 16px;
+}
+
+/* 系统架构图 */
+.arch-diagram {
+  margin-bottom: 40px;
+}
+.arch-layer {
+  border: 2px solid;
+  border-radius: 14px;
+  padding: 18px 24px;
+  margin-bottom: 4px;
+}
+.layer-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.layer-tech {
+  font-size: 13px;
+  color: #606266;
+  margin-bottom: 10px;
+}
+.layer-modules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.module-tag {
+  background: rgba(255,255,255,0.7);
+  border: 1px solid #dcdfe6;
+  border-radius: 20px;
+  padding: 3px 12px;
+  font-size: 12px;
+  color: #303133;
+}
+.arch-arrow {
+  text-align: center;
+  color: #909399;
+  font-size: 13px;
+  padding: 6px 0;
+  letter-spacing: 1px;
 }
 </style>

@@ -1,5 +1,5 @@
 <template>
-  <div ref="chartRef" style="width: 100%; height: 400px"></div>
+  <div ref="chartRef" style="width: 100%; height: 100%; min-height: 300px"></div>
 </template>
 
 <script setup lang="ts">
@@ -9,8 +9,6 @@ import * as echarts from 'echarts'
 const props = defineProps<{
   data: {
     indicator: Array<{ name: string; max: number }>
-    // 这里统一一下格式，建议用 Array<{ name: string; data: number[] }> 
-    // 或者直接按照你之前 PositionDetail 传过来的结构处理
     series: Array<{ name: string; type?: string; data: number[][] }>
   }
 }>()
@@ -18,66 +16,99 @@ const props = defineProps<{
 const chartRef = ref<HTMLDivElement>()
 let chart: echarts.ECharts | null = null
 
+// 每条 series 的独立颜色（含渐变用的 rgba stops）
+const PALETTE = [
+  { color: '#5470c6', g0: 'rgba(84,112,198,0.65)', g1: 'rgba(84,112,198,0.06)' },
+  { color: '#ee6666', g0: 'rgba(238,102,102,0.65)', g1: 'rgba(238,102,102,0.06)' },
+  { color: '#91cc75', g0: 'rgba(145,204,117,0.65)', g1: 'rgba(145,204,117,0.06)' },
+  { color: '#fac858', g0: 'rgba(250,200,88,0.65)',  g1: 'rgba(250,200,88,0.06)'  },
+  { color: '#73c0de', g0: 'rgba(115,192,222,0.65)', g1: 'rgba(115,192,222,0.06)' },
+]
+
 // 核心配置逻辑
 function updateChart() {
   if (!chart) return
-  
-  // 防御性编程：如果数据还没传过来，直接返回，避免报错
-  if (!props.data || !props.data.indicator || props.data.indicator.length === 0) {
+
+  // 1. 如果数据不完整，显示空状态
+  if (!props.data || !props.data.series || props.data.series.length === 0) {
+    chart.setOption({
+      title: {
+        text: '暂无画像数据',
+        left: 'center',
+        top: 'center',
+        textStyle: { color: '#909399', fontWeight: 'normal', fontSize: 14 }
+      },
+      series: []
+    }, true)
     return
   }
 
+  const allSeries = props.data.series
+  const indicator = props.data.indicator
+
+  // 2. 有数据时的正常逻辑
   const option = {
+    color: PALETTE.map(p => p.color),
     tooltip: {
-      trigger: 'item'
+      trigger: 'item',
+      enterable: false,
+      formatter: () => {
+        // 始终显示所有 series 的完整维度数值
+        const COLORS = PALETTE.map(p => p.color)
+        let html = '<div style="font-size:13px;line-height:1.8;min-width:200px">'
+        indicator.forEach((ind: any, i: number) => {
+          html += `<div><span style="color:#606266">${ind.name}</span>：`
+          allSeries.forEach((s: any, si: number) => {
+            const val = (s.data?.[0] || [])[i] ?? 0
+            html += `<span style="color:${COLORS[si % COLORS.length]};font-weight:700;margin-left:10px">${val}</span>`
+            if (allSeries.length > 1) {
+              html += `<span style="color:#909399;font-size:11px"> ${s.name}</span>`
+            }
+          })
+          html += '</div>'
+        })
+        html += '</div>'
+        return html
+      }
     },
     legend: {
       bottom: '5',
-      data: props.data.series.map(s => s.name)
+      data: allSeries.map((s: any) => s.name),
+      textStyle: { fontSize: 13 },
+      itemGap: 20,
     },
     radar: {
-      indicator: props.data.indicator,
-      center: ['50%', '50%'],
-      radius: '65%',
-      shape: 'polygon',
-      axisName: {
-        color: '#666',
-        borderRadius: 3,
-        padding: [3, 5]
-      },
-      splitArea: {
-        areaStyle: {
-          color: ['#fff', '#f6f6f6']
-        }
-      }
+      indicator: indicator || [],
+      splitNumber: 5,
+      axisName: { color: '#555', fontSize: 12 },
+      splitLine: { lineStyle: { color: ['#e4e7ed'] } },
+      splitArea: { areaStyle: { color: ['rgba(255,255,255,0)', 'rgba(240,244,250,0.3)'] } },
     },
-    series: props.data.series.map(s => ({
-      name: s.name,
-      type: 'radar',
-      // 注意：ECharts 雷达图的数据结构是 data: [{ value: [...] }]
-      data: s.data.map(valArray => ({
-        value: valArray,
+    series: allSeries.map((s: any, idx: number) => {
+      const p = PALETTE[idx % PALETTE.length]
+      return {
         name: s.name,
-        // 根据名称分配颜色，默认蓝色，对比色红色
+        type: 'radar',
+        symbol: 'circle',
+        symbolSize: 5,
+        lineStyle: { color: p.color, width: 2 },
+        itemStyle: { color: p.color },
         areaStyle: {
-          color: s.name === '能力画像' ? 'rgba(64,158,255,0.4)' : 'rgba(245,108,108,0.4)'
+          color: new echarts.graphic.RadialGradient(0.5, 0.5, 1, [
+            { offset: 0, color: p.g1 },   // 中心：浅
+            { offset: 1, color: p.g0 },   // 边缘：深
+          ])
         },
-        lineStyle: {
-          width: 2
-        }
-      })),
-      symbol: 'circle',
-      symbolSize: 6,
-      // 开启数据更新动画
-      animationDuration: 1000
-    }))
+        data: (s.data || []).map((valArray: number[]) => ({
+          value: valArray,
+          name: s.name,
+        })),
+      }
+    }),
   }
-  
-  // setOption 的第二个参数 true 表示不合并旧数据，完全覆盖（防止数据切换时残余旧线条）
   chart.setOption(option, true)
 }
 
-// 监听窗口大小变化，防止图表变形
 const handleResize = () => {
   chart?.resize()
 }
@@ -98,5 +129,6 @@ watch(() => props.data, () => {
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   chart?.dispose()
+  chart = null // 显式释放引用
 })
 </script>

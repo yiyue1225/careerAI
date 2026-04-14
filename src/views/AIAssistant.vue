@@ -74,6 +74,7 @@ const messages = ref<Message[]>([])
 const inputText = ref('')
 const loading = ref(false)
 const messagesContainer = ref<HTMLElement>()
+const conversationId = ref('')
 
 // 快速提问示例
 const quickQuestions = [
@@ -101,7 +102,13 @@ const mockAIResponse = (userMessage: string): string => {
 
 // 格式化消息（支持简单 Markdown）
 const formatMessage = (text: string) => {
-  return text.replace(/\n/g, '<br>')
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code style="background:#f4f4f5;padding:2px 6px;border-radius:4px;font-size:13px">$1</code>')
+    .replace(/^### (.+)$/gm, '<strong style="font-size:15px">$1</strong>')
+    .replace(/^## (.+)$/gm, '<strong style="font-size:16px">$1</strong>')
+    .replace(/^- (.+)$/gm, '• $1')
+    .replace(/\n/g, '<br>')
 }
 
 // 滚动到底部
@@ -134,10 +141,19 @@ const sendMessage = async () => {
   loading.value = true
 
   try {
-    // 模拟网络延迟，后续替换为真实 API 调用
-    await new Promise(resolve => setTimeout(resolve, 800))
-    const reply = mockAIResponse(text)
-    addMessage('assistant', reply)
+    const baseURL = import.meta.env.VITE_API_BASE_URL ?? ''
+    const res = await fetch(`${baseURL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, conversationId: conversationId.value || undefined }),
+    })
+    const data = await res.json()
+    if (data.code === 0) {
+      conversationId.value = data.conversationId
+      addMessage('assistant', data.answer)
+    } else {
+      throw new Error(data.message)
+    }
   } catch (error) {
     console.error('AI 请求失败', error)
     addMessage('assistant', '抱歉，我现在无法回答，请稍后再试。')

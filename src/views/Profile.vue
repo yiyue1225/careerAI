@@ -29,44 +29,70 @@
     </div>
 
     <el-card v-if="!profile" class="upload-card" shadow="hover">
-      <el-upload
-        drag
-        :auto-upload="false"
-        :on-change="handleUpload"
-        :show-file-list="false" 
-        accept=".pdf,.doc,.docx"
-        class="upload-area"
-      >
-        <el-icon class="el-icon--upload"><upload-filled /></el-icon>
-        <div class="el-upload__text">拖拽文件到此处 或 <em>点击上传</em></div>
-        <template #tip>
-          <div class="el-upload__tip">仅支持 PDF 或 Word 格式 (最大 10MB)</div>
-        </template>
-      </el-upload>
-
-      <div v-if="selectedFile" class="attachment-container">
-        <div class="attachment-header">已上传附件：</div>
-        <div class="attachment-item">
-          <el-icon class="file-icon"><Document /></el-icon>
-          <span class="file-name">{{ selectedFile.name }}</span>
-          <el-icon class="delete-icon" @click="selectedFile = null"><CircleClose /></el-icon>
-        </div>
-      </div>
-
-      <div class="upload-actions">
-        <el-button 
-          type="primary" 
-          size="large" 
-          @click="mockUpload" 
-          :loading="uploading"
+      <!-- 正常上传区域 -->
+      <template v-if="!uploading">
+        <el-upload
+          drag
+          :auto-upload="false"
+          :on-change="handleUpload"
+          :show-file-list="false"
+          accept=".pdf,.doc,.docx"
+          class="upload-area"
         >
-          开始 AI 解析
-        </el-button>
-        <el-button size="large">手动填写</el-button>
+          <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+          <div class="el-upload__text">拖拽文件到此处 或 <em>点击上传</em></div>
+          <template #tip>
+            <div class="el-upload__tip">仅支持 PDF 或 Word 格式 (最大 10MB)</div>
+          </template>
+        </el-upload>
+
+        <div v-if="selectedFile" class="attachment-container">
+          <div class="attachment-header">已上传附件：</div>
+          <div class="attachment-item">
+            <el-icon class="file-icon"><Document /></el-icon>
+            <span class="file-name">{{ selectedFile.name }}</span>
+            <el-icon class="delete-icon" @click="selectedFile = null"><CircleClose /></el-icon>
+          </div>
+        </div>
+
+        <div class="upload-actions">
+          <el-button type="primary" size="large" @click="handleAnalysis">
+            开始 AI 解析
+          </el-button>
+          <el-button size="large">手动填写</el-button>
+        </div>
+      </template>
+
+      <!-- AI 智能体工作进度 -->
+      <div v-else class="agent-progress">
+        <div class="agent-header">
+          <span class="agent-icon">🤖</span>
+          <span class="agent-title">AI 智能体正在工作中...</span>
+        </div>
+        <el-steps :active="agentStep" finish-status="success" direction="vertical" class="agent-steps">
+          <el-step title="读取简历文件" :description="agentStep > 0 ? '文本提取完成 ✓' : '提取 PDF / Word 文本内容...'" />
+          <el-step title="调用 Dify 智能体" :description="agentStep === 1 ? '正在连接，请稍候（约5-15秒）...' : agentStep > 1 ? '智能体响应完成 ✓' : ''" />
+          <el-step title="解析能力维度" :description="agentStep === 2 ? '正在构建你的能力画像...' : agentStep > 2 ? '画像生成完成 ✓' : ''" />
+        </el-steps>
+        <div class="agent-tip">
+          <el-icon><InfoFilled /></el-icon>
+          基于 Dify 平台 · qwen3.5-plus 大模型 · 请耐心等待
+        </div>
       </div>
     </el-card>
 
     <div v-else class="profile-content">
+      <!-- AI来源标注 -->
+      <div class="source-banner" :class="isFallbackMode ? 'fallback-banner' : 'ai-banner'">
+        <span v-if="!isFallbackMode">
+          <el-icon><Cpu /></el-icon>
+          &nbsp;由 <strong>Dify AI 智能体</strong> 解析生成 · qwen3.5-plus · 结果可信
+        </span>
+        <span v-else>
+          <el-icon><Warning /></el-icon>
+          &nbsp;由<strong>本地规则引擎</strong>解析 · AI服务未接入 · 结果仅供参考
+        </span>
+      </div>
       <el-row :gutter="20" class="info-row">
         <el-col :span="12">
           <el-card class="info-card" shadow="hover">
@@ -100,7 +126,12 @@
             <template #header>
               <span><el-icon><DataLine /></el-icon> 能力维度雷达图</span>
             </template>
-            <RadarChart :data="radarData" />
+            <div style="height:360px">
+              <RadarChart
+                v-if="profile && profile.dimensions"
+                :data="radarData"
+              />
+            </div>
           </el-card>
         </el-col>
         <el-col :span="12">
@@ -125,20 +156,23 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox, ElNotification } from 'element-plus'
 import type { UploadFile, UploadRawFile } from 'element-plus'
-import { 
-  UploadFilled, 
-  User, 
-  DataLine, 
-  Collection, 
-  Document, 
-  CircleClose 
+import {
+  UploadFilled,
+  User,
+  DataLine,
+  Collection,
+  Document,
+  CircleClose,
+  InfoFilled,
+  Warning,
+  Cpu,
 } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store'
 import RadarChart from '@/components/RadarChart.vue'
 
-// 类型定义
+// 类型定义（符合 A13 赛题要求）
 interface StudentProfile {
   name: string
   major: string
@@ -162,10 +196,13 @@ interface StudentProfile {
 }
 
 const userStore = useUserStore()
+// 💡 profile 通过 store 响应式联动
 const profile = computed(() => userStore.studentProfile)
 const uploading = ref(false)
+const agentStep = ref(0)       // 0=文件读取 1=Dify调用中 2=解析维度 3=完成
 const selectedFile = ref<UploadRawFile | null>(null)
 const isDragging = ref(false)
+const isFallbackMode = ref(false)
 
 const colors = [
   { color: '#f56c6c', percentage: 60 },
@@ -173,7 +210,7 @@ const colors = [
   { color: '#5cb87a', percentage: 100 },
 ]
 
-// 统一文件校验
+// 文件校验逻辑
 const processFile = (file: File) => {
   const fileExt = file.name.split('.').pop()?.toLowerCase()
   const isAllowed = ['pdf', 'doc', 'docx'].includes(fileExt || '')
@@ -191,7 +228,7 @@ const handleUpload = (file: UploadFile) => {
   if (file.raw) processFile(file.raw)
 }
 
-// 拖拽逻辑
+// 核心：全屏拖拽逻辑
 const handleDragOver = () => {
   if (!profile.value) isDragging.value = true
 }
@@ -204,54 +241,94 @@ const handleDrop = (e: DragEvent) => {
   if (files && files.length > 0) processFile(files[0])
 }
 
-// 退出并返回上传页
 const handleExit = () => {
+  console.log('点击了退出按钮') // 调试点 1
+  
   ElMessageBox.confirm('确定要退出并清除当前简历数据吗？', '提示', {
     confirmButtonText: '确定清除',
     cancelButtonText: '取消',
     type: 'warning',
   }).then(() => {
+    console.log('确认清除，准备调用 Store...') // 调试点 2
+    
+    // 1. 清除当前页面文件选中状态
     selectedFile.value = null
+    
+    // 2. 强制清除 Store 数据
+    // 如果 setStudentProfile 还是没反应，可以尝试下面注释掉的暴力写法
     userStore.setStudentProfile(null) 
-    ElMessage.success('数据已清除')
-  }).catch(() => {})
+    
+    // 暴力写法 (仅当上面一行失效时使用):
+    // userStore.$patch({ studentProfile: null })
+    
+    console.log('Store 清除命令已发送') // 调试点 3
+    ElMessage.success('数据已成功清除')
+  }).catch(() => {
+    console.log('用户取消了清除')
+  })
 }
 
-// 模拟 AI 解析并切换页面
-const mockUpload = () => {
+const handleAnalysis = async () => {
   if (!selectedFile.value) {
-    ElMessage.warning('请先上传文件')
-    return
+    ElMessage.warning('请先上传简历文件');
+    return;
   }
-  uploading.value = true
-  setTimeout(() => {
-    const analyzedResult: StudentProfile = {
-      name: '张三',
-      major: '计算机科学与技术',
-      grade: '大三',
-      completeness: 85,
-      competitiveness: 90,
-      skills: {
-        professionalSkills: ['Java', 'Python', 'Spring Boot', 'Mysql'],
-        certificates: ['CET-4', '计算机二级'],
-        internship: ['字节跳动实习']
-      },
-      dimensions: {
-        professional: 95,
-        certificate: 80,
-        innovation: 85,
-        learning: 92,
-        stress: 78,
-        communication: 88,
-        internship: 85
-      }
-    }
-    userStore.setStudentProfile(analyzedResult)
-    uploading.value = false
-    ElMessage.success('解析完成')
-  }, 2000)
-}
 
+  uploading.value = true;
+  agentStep.value = 0;
+
+  try {
+    // 步骤1：构建文件数据（读取文件）
+    const formData = new FormData();
+    formData.append('resume', selectedFile.value);
+    agentStep.value = 1;  // 进入"调用Dify智能体"阶段
+
+    const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
+    const response = await fetch(`${baseURL}/api/analyze`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    agentStep.value = 2;  // 进入"解析维度"阶段
+    const result = await response.json();
+
+    if (result.code === 0) {
+      agentStep.value = 3;  // 完成
+      await new Promise(r => setTimeout(r, 400));  // 让步骤3显示一下
+
+      isFallbackMode.value = result.source === 'fallback'
+      userStore.setStudentProfile(result.data);
+
+      if (result.source === 'fallback') {
+        ElNotification({
+          title: '简历解析完成（本地模式）',
+          message: '已从简历中识别技能和基本信息。如需更精准的AI分析，请确认Dify服务已正常配置。',
+          type: 'warning',
+          duration: 5000,
+          position: 'top-right',
+        });
+      } else {
+        ElNotification({
+          title: 'AI 智能体解析完成',
+          message: `已由 Dify 智能体生成能力画像，识别到 ${result.data?.skills?.professionalSkills?.length || 0} 项技能。`,
+          type: 'success',
+          duration: 4000,
+          position: 'top-right',
+        });
+      }
+    } else {
+      throw new Error(result.message);
+    }
+  } catch (error) {
+    console.error('解析失败:', error);
+    ElMessage.error('解析失败，请检查后端连接');
+  } finally {
+    uploading.value = false;
+    agentStep.value = 0;
+  }
+};
+
+// 雷达图数据计算
 const radarData = computed(() => {
   if (!profile.value) return { indicator: [], series: [] }
   const d = profile.value.dimensions
@@ -265,7 +342,18 @@ const radarData = computed(() => {
       { name: '沟通能力', max: 100 },
       { name: '实习经验', max: 100 }
     ],
-    series: [{ value: [d.professional, d.certificate, d.innovation, d.learning, d.stress, d.communication, d.internship] }]
+    series: [{ 
+      name: '能力画像', // 💡 必须有 name，否则 Legend 报错
+      data: [[ // 💡 必须是双重数组 [[]]
+        d.professional, 
+        d.certificate, 
+        d.innovation, 
+        d.learning, 
+        d.stress, 
+        d.communication, 
+        d.internship
+      ]] 
+    }]
   }
 })
 
@@ -414,6 +502,58 @@ const formatSkillLabel = (key: string) => {
 
 .delete-icon:hover {
   transform: scale(1.2);
+}
+
+/* AI智能体进度 */
+.agent-progress {
+  padding: 20px 10px;
+  text-align: center;
+}
+.agent-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+.agent-icon { font-size: 32px; animation: bounce 1s infinite; }
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.agent-title { font-size: 18px; font-weight: 600; color: #409eff; }
+.agent-steps { text-align: left; max-width: 340px; margin: 0 auto 20px; }
+.agent-tip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #909399;
+  background: #f8faff;
+  border-radius: 8px;
+  padding: 8px 16px;
+}
+
+/* AI来源标注条 */
+.source-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+.ai-banner {
+  background: linear-gradient(90deg, #ecf5ff, #f0f9ff);
+  color: #409eff;
+  border: 1px solid #b3d8ff;
+}
+.fallback-banner {
+  background: #fdf6ec;
+  color: #e6a23c;
+  border: 1px solid #faecd8;
 }
 
 .upload-actions {

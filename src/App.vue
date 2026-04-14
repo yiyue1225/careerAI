@@ -1,12 +1,15 @@
 <template>
   <el-config-provider :locale="zhCn">
-    <Layout />
+    <router-view v-if="route.meta.noLayout" />
+    <Layout v-else />
   </el-config-provider>
 </template>
 
 <script setup lang="ts">
+import { useRoute } from 'vue-router'
 import Layout from '@/components/Layout.vue'
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs'
+const route = useRoute()
 </script>
 
 <style>

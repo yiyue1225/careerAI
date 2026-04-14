@@ -25,10 +25,12 @@
         <el-descriptions :column="2" border>
           <el-descriptions-item label="专业技能">
             <template v-if="position.requirements?.professionalSkills?.length">
-              <el-tag 
-                v-for="s in position.requirements.professionalSkills" 
-                :key="s" 
-                class="skill-tag"
+              <el-tag
+                v-for="s in position.requirements.professionalSkills"
+                :key="s"
+                class="skill-tag skill-tag-clickable"
+                @click="goToPositionsWithSkill(s)"
+                title="点击查看需要该技能的岗位"
               >
                 {{ s }}
               </el-tag>
@@ -66,7 +68,10 @@
         <el-col :span="12">
           <h3>能力要求雷达图</h3>
           <div class="chart-container">
-            <RadarChart :data="radarData" />
+            <div v-if="hasDimensions" style="height:360px;width:100%">
+              <RadarChart :data="radarData" />
+            </div>
+            <el-empty v-else description="暂无能力维度数据" :image-size="80" />
           </div>
         </el-col>
         <el-col :span="12">
@@ -79,7 +84,7 @@
       
       <div class="footer-actions">
         <el-button type="primary" size="large" @click="$router.push('/match')">开始人岗匹配</el-button>
-        <el-button link @click="$router.back()">返回列表</el-button>
+        <el-button link @click="$router.push('/positions')">返回列表</el-button>
       </div>
     </el-card>
   </div>
@@ -87,13 +92,14 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 import { graphData } from '@/mock/graph'
 import RadarChart from '@/components/RadarChart.vue'
 import RelationGraph from '@/components/RelationGraph.vue'
 
 const route = useRoute()
+const router = useRouter()
 
 // 1. 初始化一个结构完整的对象，避免初次渲染时访问深度属性报错
 const position = ref<any>({
@@ -107,21 +113,17 @@ const position = ref<any>({
   dimensions: {}
 })
 
-// 获取详情的方法
+// 获取详情的方法 —— 直接用 /api/positions/:id，无需遍历分页
 const fetchDetail = async () => {
   try {
     const baseURL = import.meta.env.VITE_API_BASE_URL ?? '';
-    const res = await axios.get(`${baseURL}/api/positions`)
-    
+    const res = await axios.get(`${baseURL}/api/positions/${route.params.id}`)
     if (res.data.code === 0) {
-      const target = res.data.data.find((p: any) => String(p.id) === String(route.params.id))
-      if (target) {
-        // 合并数据，确保即使后端漏了字段，基础结构还在
-        position.value = {
-          ...target,
-          requirements: target.requirements || { professionalSkills: [], certificates: [], internship: [] },
-          dimensions: target.dimensions || {}
-        }
+      const target = res.data.data
+      position.value = {
+        ...target,
+        requirements: target.requirements || { professionalSkills: [], certificates: [], internship: [] },
+        dimensions: target.dimensions || {}
       }
     }
   } catch (error) {
@@ -134,6 +136,11 @@ watch(() => route.params.id, (newId) => {
   if (newId) fetchDetail()
 }, { immediate: true })
 
+
+const hasDimensions = computed(() => {
+  const d = position.value?.dimensions || {}
+  return Object.values(d).some((v: any) => v > 0)
+})
 
 const radarData = computed(() => {
   const d = position.value?.dimensions || {}
@@ -163,6 +170,11 @@ const radarData = computed(() => {
     }]
   }
 })
+
+const goToPositionsWithSkill = (skill: string) => {
+  // 用专用 skill 参数，后端用 JSON_CONTAINS 匹配 professionalSkills
+  router.push({ path: '/positions', query: { skill } })
+}
 
 const graph = computed(() => {
   const currentName = position.value?.name || '未知岗位';
@@ -216,6 +228,17 @@ const graph = computed(() => {
 .skill-tag {
   margin-right: 8px;
   margin-bottom: 8px;
+}
+.skill-tag-clickable {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.skill-tag-clickable:hover {
+  background-color: #409eff;
+  color: #fff;
+  border-color: #409eff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(64,158,255,0.4);
 }
 .charts-section {
   margin-top: 40px;

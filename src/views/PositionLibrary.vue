@@ -31,26 +31,56 @@
         <el-col :span="3">
           <el-button type="primary" :icon="Search" @click="applyFilter">筛选</el-button>
         </el-col>
+        <el-col :span="3" v-if="userStore.studentProfile">
+          <el-button
+            :type="sortByMatch ? 'warning' : 'default'"
+            :icon="Sort"
+            @click="sortByMatch = !sortByMatch"
+            :title="sortByMatch ? '取消匹配度排序' : '按匹配度降序'"
+          >
+            {{ sortByMatch ? '匹配排序 ✓' : '匹配排序' }}
+          </el-button>
+        </el-col>
       </el-row>
     </el-card>
 
+    <!-- 技能筛选芯片（从岗位详情跳转时显示） -->
+    <div v-if="skillFilter" class="skill-filter-bar">
+      <el-icon color="#409eff"><Filter /></el-icon>
+      <span>正在筛选包含技能：</span>
+      <el-tag type="primary" effect="dark" size="default">{{ skillFilter }}</el-tag>
+      <el-button link size="small" style="margin-left:8px;color:#f56c6c" @click="skillFilter=''; applyFilter()">
+        × 清除筛选
+      </el-button>
+    </div>
+
+    <!-- 图表区域 -->
     <el-row :gutter="20" class="chart-section">
-      <el-col :span="24">
+      <el-col :span="14">
         <el-card class="chart-card" shadow="hover">
           <template #header>
             <span><el-icon><PieChart /></el-icon> 热门行业岗位分布</span>
           </template>
-          <div ref="pieChartRef" style="width: 100%; height: 250px;"></div>
+          <div ref="pieChartRef" style="width: 100%; height: 260px;"></div>
+        </el-card>
+      </el-col>
+      <el-col :span="10">
+        <el-card class="chart-card" shadow="hover">
+          <template #header>
+            <span><el-icon><TrendCharts /></el-icon> 市场最热门技能 Top 15</span>
+          </template>
+          <div ref="skillChartRef" style="width: 100%; height: 260px;"></div>
         </el-card>
       </el-col>
     </el-row>
 
+    <!-- 岗位列表 -->
     <div class="position-list" v-loading="loading">
       <el-row :gutter="20">
         <el-col :span="8" v-for="pos in positionsWithMatch" :key="pos.id">
-          <el-card class="position-card" shadow="hover" @click="goToDetail(pos.id)">
+          <el-card class="position-card" shadow="hover">
             <div class="card-header">
-              <h3>{{ pos.name }}</h3>
+              <h3 @click="goToDetail(pos.id)" class="job-title-link">{{ pos.name }}</h3>
               <el-tag :type="getMatchLevelTag(pos.matchLevel)" size="small">
                 匹配度 {{ pos.matchLevel }}%
               </el-tag>
@@ -68,19 +98,24 @@
             <div class="card-footer">
               <div class="industry-tags">
                 <template v-if="pos.clean_industry && pos.clean_industry.length">
-                   <el-tag 
-                     v-for="tag in pos.clean_industry" 
-                     :key="tag" 
-                     size="small" 
-                     type="info" 
-                     class="industry-tag"
-                   >
-                     {{ tag }}
-                   </el-tag>
+                  <el-tag v-for="tag in pos.clean_industry" :key="tag" size="small" type="info" class="industry-tag">
+                    {{ tag }}
+                  </el-tag>
                 </template>
                 <span v-else class="industry">{{ pos.industry }}</span>
               </div>
-              <el-button type="text" size="small">查看详情 <el-icon><ArrowRight /></el-icon></el-button>
+              <div class="card-actions">
+                <el-button
+                  size="small"
+                  :type="compareList.some(c => c.id === pos.id) ? 'warning' : 'default'"
+                  plain
+                  @click.stop="toggleCompare(pos)"
+                  :disabled="compareList.length >= 2 && !compareList.some(c => c.id === pos.id)"
+                >
+                  {{ compareList.some(c => c.id === pos.id) ? '取消对比' : '+ 对比' }}
+                </el-button>
+                <el-button type="text" size="small" @click="goToDetail(pos.id)">详情 <el-icon><ArrowRight /></el-icon></el-button>
+              </div>
             </div>
           </el-card>
         </el-col>
@@ -96,33 +131,139 @@
       @current-change="handlePageChange"
       class="pagination"
     />
+
+    <!-- 底部悬浮对比栏 -->
+    <Transition name="slide-up">
+      <div v-if="compareList.length > 0" class="compare-bar">
+        <div class="compare-bar-items">
+          <div v-for="pos in compareList" :key="pos.id" class="compare-bar-item">
+            <span>{{ pos.name }}</span>
+            <el-icon class="remove-icon" @click="toggleCompare(pos)"><CircleClose /></el-icon>
+          </div>
+          <div v-if="compareList.length < 2" class="compare-bar-placeholder">
+            <el-icon><Plus /></el-icon> 再选一个岗位
+          </div>
+        </div>
+        <el-button
+          type="primary"
+          :disabled="compareList.length < 2"
+          @click="showCompareDialog = true"
+          round
+        >
+          开始对比 ({{ compareList.length }}/2)
+        </el-button>
+      </div>
+    </Transition>
+
+    <!-- 岗位对比弹窗 -->
+    <el-dialog v-model="showCompareDialog" title="岗位能力对比分析" width="82%" top="4vh" @opened="onCompareDialogOpened">
+      <div v-if="compareList.length === 2" class="compare-content">
+        <el-row :gutter="30" class="compare-header-row">
+          <el-col :span="12">
+            <div class="compare-job-header">
+              <h3>{{ compareList[0].name }}</h3>
+              <p>{{ compareList[0].company }} · {{ compareList[0].location }}</p>
+              <p class="compare-salary">{{ compareList[0].salary }}</p>
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <div class="compare-job-header right">
+              <h3>{{ compareList[1].name }}</h3>
+              <p>{{ compareList[1].company }} · {{ compareList[1].location }}</p>
+              <p class="compare-salary">{{ compareList[1].salary }}</p>
+            </div>
+          </el-col>
+        </el-row>
+
+        <!-- 合并双系列雷达图（两条线在同一张图，直观对比） -->
+        <el-card shadow="never" style="margin-top:16px;border:1px solid #ebeef5">
+          <template #header>
+            <div style="display:flex;align-items:center;gap:16px">
+              <span>能力维度对比</span>
+              <span style="display:flex;align-items:center;gap:6px;font-size:13px">
+                <span style="display:inline-block;width:12px;height:3px;background:#5470c6;border-radius:2px"></span>
+                {{ compareList[0].name }}
+              </span>
+              <span style="display:flex;align-items:center;gap:6px;font-size:13px">
+                <span style="display:inline-block;width:12px;height:3px;background:#ee6666;border-radius:2px"></span>
+                {{ compareList[1].name }}
+              </span>
+            </div>
+          </template>
+          <div style="height:360px">
+            <RadarChart :data="compareRadarData" />
+          </div>
+        </el-card>
+
+        <!-- 维度对比表 -->
+        <h4 style="margin: 20px 0 10px;">维度得分对比</h4>
+        <el-table :data="compareDimTable" stripe border>
+          <el-table-column prop="dimension" label="能力维度" width="120" />
+          <el-table-column :label="compareList[0].name" width="140">
+            <template #default="{ row }">
+              <el-progress :percentage="row.val0" :stroke-width="8" :color="row.val0 >= row.val1 ? '#67c23a' : '#e4e7ed'" />
+            </template>
+          </el-table-column>
+          <el-table-column :label="compareList[1].name" width="140">
+            <template #default="{ row }">
+              <el-progress :percentage="row.val1" :stroke-width="8" :color="row.val1 > row.val0 ? '#67c23a' : '#e4e7ed'" />
+            </template>
+          </el-table-column>
+          <el-table-column label="差值" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.val0 >= row.val1 ? 'success' : 'info'" size="small">
+                {{ row.val0 >= row.val1 ? '+' : '' }}{{ row.val0 - row.val1 }}
+              </el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <!-- 技能对比 -->
+        <el-row :gutter="20" style="margin-top: 20px;">
+          <el-col :span="12">
+            <h4>{{ compareList[0].name }} 核心技能</h4>
+            <div class="skill-tag-list">
+              <el-tag v-for="s in compareList[0].requirements?.professionalSkills?.slice(0,8)" :key="s" effect="plain">{{ s }}</el-tag>
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <h4>{{ compareList[1].name }} 核心技能</h4>
+            <div class="skill-tag-list">
+              <el-tag v-for="s in compareList[1].requirements?.professionalSkills?.slice(0,8)" :key="s" effect="plain" type="warning">{{ s }}</el-tag>
+            </div>
+          </el-col>
+        </el-row>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import * as echarts from 'echarts'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import { Search, PieChart, ArrowRight } from '@element-plus/icons-vue'
+import { Search, PieChart, ArrowRight, TrendCharts, CircleClose, Plus, Filter, Sort } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store'
+import RadarChart from '@/components/RadarChart.vue'
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const studentProfile = userStore.studentProfile
 
 // ==========================================
-// 1. 筛选状态与全量选项模块
+// 1. 筛选状态
 // ==========================================
 const search = ref('')
 const selectedIndustry = ref('')
 const selectedCity = ref('')
 const selectedSalary = ref('')
-const industries = ref<string[]>([]) // 存储全量行业
-const cities = ref<string[]>([])     // 存储全量城市
+const skillFilter = ref('') // 来自岗位详情技能点击的精确匹配
+const industries = ref<string[]>([])
+const cities = ref<string[]>([])
 
-// 获取后端数据库中所有的行业和城市选项
 const fetchFilterOptions = async () => {
   try {
     const res = await axios.get('/api/position-filters')
@@ -135,51 +276,41 @@ const fetchFilterOptions = async () => {
   }
 }
 
-// 筛选按钮点击：重置页码并重新请求
 const applyFilter = () => {
-  currentPage.value = 1;
-  fetchPositions(); 
-  fetchStats();     
-};
+  currentPage.value = 1
+  fetchPositions()
+  fetchStats()
+}
 
-// 监听搜索框，清空时自动刷新
 watch(search, (newVal) => {
   if (newVal === '') applyFilter()
 })
 
-
 // ==========================================
-// 2. 数据获取与分页模块
+// 2. 数据获取与分页
 // ==========================================
-const positions = ref<any[]>([]) 
+const positions = ref<any[]>([])
 const totalPositions = ref(0)
 const currentPage = ref(1)
-const pageSize = 12 // 每页 12 个
+const pageSize = 12
 const loading = ref(false)
 
 const fetchPositions = async () => {
-  loading.value = true;
+  loading.value = true
   try {
-    const response = await axios.get(`/api/positions`, {
-      params: {
-        page: currentPage.value,
-        size: pageSize,
-        search: search.value,
-        industry: selectedIndustry.value,
-        city: selectedCity.value,
-        salary: selectedSalary.value
-      }
-    });
+    const response = await axios.get('/api/positions', {
+      params: { page: currentPage.value, size: pageSize, search: search.value, skill: skillFilter.value, industry: selectedIndustry.value, city: selectedCity.value, salary: selectedSalary.value }
+    })
     if (response.data.code === 0) {
-      positions.value = response.data.data;
-      totalPositions.value = response.data.total;
+      positions.value = response.data.data
+      totalPositions.value = response.data.total
     }
   } catch (error) {
-    ElMessage.error('获取岗位库数据失败');
+    ElMessage.error('获取岗位库数据失败')
   } finally {
-    loading.value = false;
+    loading.value = false
   }
-};
+}
 
 const handlePageChange = (page: number) => {
   currentPage.value = page
@@ -187,24 +318,31 @@ const handlePageChange = (page: number) => {
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
+// ==========================================
+// 3. 匹配度计算 + 排序
+// ==========================================
+const sortByMatch = ref(false)
 
-// ==========================================
-// 3. 算法计算模块（匹配度）
-// ==========================================
 const positionsWithMatch = computed(() => {
-  if (!studentProfile) return positions.value
-  return positions.value.map(pos => {
-    const dims = ['professional', 'certificate', 'innovation', 'learning', 'stress', 'communication', 'internship']
-    let totalGap = 0
-    dims.forEach(d => {
-      const studentVal = studentProfile.dimensions[d] || 0
-      const posVal = pos.dimensions?.[d] || 0
-      totalGap += Math.abs(studentVal - posVal)
-    })
-    const avgGap = totalGap / dims.length
-    const match = Math.max(0, Math.min(100, 100 - avgGap))
-    return { ...pos, matchLevel: Math.round(match) }
-  })
+  const mapped = !studentProfile
+    ? positions.value.map(pos => ({ ...pos, matchLevel: 0 }))
+    : positions.value.map(pos => {
+        const dims = ['professional', 'certificate', 'innovation', 'learning', 'stress', 'communication', 'internship']
+        let totalGap = 0
+        dims.forEach(d => {
+          const studentVal = studentProfile.dimensions[d] || 0
+          const posVal = pos.dimensions?.[d] || 0
+          totalGap += Math.abs(studentVal - posVal)
+        })
+        const avgGap = totalGap / dims.length
+        const match = Math.max(0, Math.min(100, 100 - avgGap))
+        return { ...pos, matchLevel: Math.round(match) }
+      })
+
+  if (sortByMatch.value && studentProfile) {
+    return [...mapped].sort((a, b) => b.matchLevel - a.matchLevel)
+  }
+  return mapped
 })
 
 const getMatchLevelTag = (level: number) => {
@@ -213,175 +351,255 @@ const getMatchLevelTag = (level: number) => {
   return 'danger'
 }
 
-
 // ==========================================
-// 4. ECharts 图表模块
+// 4. 图表：饼图 + 技能热度横向柱状图
 // ==========================================
-const pieChartRef = ref<HTMLElement | null>(null);
-
-let myChart: echarts.ECharts | null = null;
-
+const pieChartRef = ref<HTMLElement | null>(null)
+const skillChartRef = ref<HTMLElement | null>(null)
+let myChart: echarts.ECharts | null = null
+let skillChart: echarts.ECharts | null = null
 
 const fetchStats = async () => {
   try {
     const response = await axios.get('/api/industry-stats', {
-      params: {
-        search: search.value,      // 👈 确保传了关键词
-        industry: selectedIndustry.value,
-        city: selectedCity.value,
-        salary: selectedSalary.value
-      }
-    });
-    if (response.data.code === 0) {
-      updateChart(response.data.data);
-    }
+      params: { search: search.value, industry: selectedIndustry.value, city: selectedCity.value, salary: selectedSalary.value }
+    })
+    if (response.data.code === 0) updatePieChart(response.data.data)
   } catch (error) {
-    console.error('加载统计失败', error);
+    console.error('加载统计失败', error)
   }
-};
+}
 
-// 定义图表渲染/更新函数
-const updateChart = (data: { name: string; value: number }[]) => {
-  if (!pieChartRef.value) return;
-
-  // 初始化实例
-  if (!myChart) {
-    myChart = echarts.init(pieChartRef.value);
+const fetchSkillStats = async () => {
+  try {
+    const res = await axios.get('/api/skill-stats')
+    if (res.data.code === 0) updateSkillChart(res.data.data.slice(0, 15))
+  } catch (e) {
+    console.error('技能统计失败', e)
   }
+}
 
-  const option: echarts.EChartsOption = {
-    title: {
-    text: '行业岗位分布统计',
-    left: '',
-    top: '0%',
-    textStyle: {
-      fontSize: 16,
-      color: '#333'
-    }
-  },
-    tooltip: { 
-      trigger: 'item',
-      formatter: '{b}: {c} ({d}%)' 
-    },
-    legend: {
-      orient: 'vertical',
-      left: 'left',
-      type: 'scroll', // 防止行业太多超出容器
-      show: false // 如果空间不够可以隐藏图例
-    },
-    series: [
-      {
-        name: '行业分布',
-        type: 'pie',
-        radius: ['40%', '70%'], // 环形图更现代
-        avoidLabelOverlap: true,
-        itemStyle: {
-          borderRadius: 8,
-          borderColor: '#fff',
-          borderWidth: 2
+const updatePieChart = (data: { name: string; value: number }[]) => {
+  if (!pieChartRef.value) return
+  if (!myChart) myChart = echarts.init(pieChartRef.value)
+  myChart.setOption({
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    legend: { orient: 'vertical', left: 'left', type: 'scroll', show: false },
+    series: [{
+      name: '行业分布', type: 'pie', radius: ['40%', '70%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderRadius: 8, borderColor: '#fff', borderWidth: 2 },
+      label: { show: true, position: 'outside' },
+      data,
+      emphasis: { itemStyle: { shadowBlur: 10, shadowColor: 'rgba(0,0,0,0.5)' } }
+    }]
+  })
+}
+
+const updateSkillChart = (data: { skill: string; count: number }[]) => {
+  if (!skillChartRef.value) return
+  if (!skillChart) skillChart = echarts.init(skillChartRef.value)
+  const skills = data.map(d => d.skill).reverse()
+  const counts = data.map(d => d.count).reverse()
+  skillChart.setOption({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    grid: { left: '3%', right: '8%', bottom: '3%', containLabel: true },
+    xAxis: { type: 'value', axisLabel: { color: '#909399' } },
+    yAxis: { type: 'category', data: skills, axisLabel: { color: '#555', fontSize: 12 } },
+    series: [{
+      type: 'bar', data: counts,
+      itemStyle: {
+        color: (params: any) => {
+          const colors = ['#5470c6', '#91cc75', '#fac858', '#ee6666', '#73c0de', '#3ba272', '#fc8452', '#9a60b4', '#ea7ccc']
+          return colors[params.dataIndex % colors.length]
         },
-        label: {
-          show: true,
-          position: 'outside'
-        },
-        data: data, // 后端传来的全量 JSON_TABLE 统计结果
-        emphasis: {
-          itemStyle: {
-            shadowBlur: 10,
-            shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.5)'
-          }
-        }
-      }
-    ]
-  };
+        borderRadius: [0, 4, 4, 0]
+      },
+      label: { show: true, position: 'right', formatter: '{c}', color: '#666', fontSize: 11 }
+    }]
+  })
+}
 
-  myChart.setOption(option);
-};
-
-// 窗口缩放自适应
 const handleResize = () => {
-  myChart?.resize();
-};
-
+  myChart?.resize()
+  skillChart?.resize()
+}
 
 // ==========================================
-// 5. 路由与生命周期
+// 5. 岗位对比功能
+// ==========================================
+const compareList = ref<any[]>([])
+const showCompareDialog = ref(false)
+
+// Dialog 动画完成后触发 window resize，让 ECharts 重新计算宽高
+const onCompareDialogOpened = () => {
+  window.dispatchEvent(new Event('resize'))
+}
+
+const toggleCompare = (pos: any) => {
+  const idx = compareList.value.findIndex(c => c.id === pos.id)
+  if (idx >= 0) {
+    compareList.value.splice(idx, 1)
+  } else {
+    if (compareList.value.length >= 2) {
+      ElMessage.warning('最多同时对比2个岗位')
+      return
+    }
+    compareList.value.push(pos)
+  }
+}
+
+const DIM_LABELS: Record<string, string> = {
+  professional: '专业技能', certificate: '证书', innovation: '创新能力',
+  learning: '学习能力', stress: '抗压能力', communication: '沟通能力', internship: '实习经验'
+}
+const DIMS = ['professional', 'certificate', 'innovation', 'learning', 'stress', 'communication', 'internship']
+
+// 合并双系列雷达图：两条线在同一张图上
+const compareRadarData = computed(() => {
+  if (compareList.value.length < 2) return { indicator: [], series: [] }
+  return {
+    indicator: DIMS.map(d => ({ name: DIM_LABELS[d], max: 100 })),
+    series: [
+      {
+        name: compareList.value[0].name,
+        data: [DIMS.map(d => compareList.value[0].dimensions?.[d] || 0)]
+      },
+      {
+        name: compareList.value[1].name,
+        data: [DIMS.map(d => compareList.value[1].dimensions?.[d] || 0)]
+      }
+    ]
+  }
+})
+
+const compareDimTable = computed(() => {
+  if (compareList.value.length < 2) return []
+  const dims = DIMS
+  return dims.map(d => ({
+    dimension: DIM_LABELS[d],
+    val0: compareList.value[0].dimensions?.[d] || 0,
+    val1: compareList.value[1].dimensions?.[d] || 0,
+  }))
+})
+
+// ==========================================
+// 6. 路由与生命周期
 // ==========================================
 const goToDetail = (id: string) => {
   router.push(`/position/${id}`)
 }
 
 onMounted(() => {
-  fetchFilterOptions() 
-  fetchPositions()     
-  fetchStats()         
+  // 接收从 PositionDetail 传来的文本搜索
+  if (route.query.search) {
+    search.value = String(route.query.search)
+  }
+  // 接收从 PositionDetail 传来的技能精确匹配
+  if (route.query.skill) {
+    skillFilter.value = String(route.query.skill)
+  }
+  fetchFilterOptions()
+  fetchPositions()
+  fetchStats()
+  fetchSkillStats()
   window.addEventListener('resize', handleResize)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
-  myChart?.dispose() 
+  myChart?.dispose()
+  skillChart?.dispose()
 })
 </script>
 
 <style scoped>
-/* 保持原有样式不变 */
-/* 修改 PositionLibrary.vue 的样式 */
-.position-library { 
-  padding: 20px; 
-  background: #f0f2f5; 
-  /* 优化点：不要设置 100vh，让内容高度由父容器决定 */
-  min-height: auto; 
-  /* 确保自身不产生滚动条 */
-  overflow: visible; 
+.position-library {
+  padding: 20px;
+  background: #f0f2f5;
+  min-height: auto;
+  overflow: visible;
+  padding-bottom: 100px; /* 为悬浮栏留空间 */
 }
 .page-title { font-size: 32px; font-weight: 600; color: #303133; }
 .page-subtitle { color: #909399; margin-bottom: 30px; }
-.filter-card, .chart-card { margin-bottom: 30px; border-radius: 12px; }
-/* 修改 PositionLibrary.vue 的样式 */
+.filter-card, .chart-card { margin-bottom: 20px; border-radius: 12px; }
+.chart-section { margin-bottom: 20px; }
+
 .position-card {
   cursor: pointer;
   margin-bottom: 20px;
   border-radius: 16px;
   transition: all 0.3s;
-  
-  min-height: 260px; 
-  height: auto; 
-  
-  overflow: hidden; 
-  
+  min-height: 260px;
+  height: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
-.position-list {
-  margin-bottom: 30px;
-  overflow: visible; /* 让内容溢出到父级，由父级统一滚动 */
-}
+.position-list { margin-bottom: 30px; overflow: visible; }
 .position-card:hover { transform: translateY(-5px); box-shadow: 0 12px 24px rgba(0,0,0,0.1); }
+.job-title-link { cursor: pointer; transition: color 0.2s; }
+.job-title-link:hover { color: #409eff; }
+.card-header { display: flex; justify-content: space-between; align-items: flex-start; }
 .card-header h3 { margin: 0; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65%; }
 .salary { color: #f56c6c; font-weight: bold; margin: 10px 0; }
 .skills { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0; min-height: 60px; }
 .card-footer { margin-top: auto; display: flex; justify-content: space-between; align-items: center; }
+.card-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 .industry { background: #f4f4f5; padding: 4px 8px; border-radius: 12px; font-size: 12px; }
+.industry-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.industry-tag { background: #f4f4f5; border-radius: 12px; }
 .pagination { text-align: center; margin-top: 30px; display: flex; justify-content: center; }
-.main-container {
-  height: 100vh;      /* 占据全屏 */
-  overflow-y: auto;   /* 只有这里允许滚动 */
-  overflow-x: hidden;
+.skill-filter-bar {
+  display: flex; align-items: center; gap: 8px;
+  background: #ecf5ff; border: 1px solid #b3d8ff; border-radius: 8px;
+  padding: 8px 16px; margin-bottom: 16px; font-size: 14px; color: #409eff;
 }
-:deep(html), :deep(body) {
-  margin: 0;
-  height: 100%;
-  overflow: hidden; /* 禁用系统自带滚动条 */
-}
-.industry-tags {
+
+/* 底部悬浮对比栏 */
+.compare-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 1px solid #e4e7ed;
+  box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
+  padding: 16px 40px;
   display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 100;
 }
-.industry-tag {
-  background: #f4f4f5;
-  border-radius: 12px;
+.compare-bar-items { display: flex; gap: 16px; align-items: center; }
+.compare-bar-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ecf5ff;
+  color: #409eff;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 14px;
 }
+.remove-icon { cursor: pointer; font-size: 16px; }
+.remove-icon:hover { color: #f56c6c; }
+.compare-bar-placeholder {
+  display: flex; align-items: center; gap: 4px;
+  color: #c0c4cc; font-size: 14px;
+  border: 1px dashed #c0c4cc; padding: 6px 16px; border-radius: 20px;
+}
+.slide-up-enter-active, .slide-up-leave-active { transition: transform 0.3s ease; }
+.slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); }
+
+/* 对比弹窗 */
+.compare-content { padding: 0 10px; }
+.compare-header-row { margin-bottom: 10px; }
+.compare-job-header { padding: 16px; background: #f5f7fa; border-radius: 10px; }
+.compare-job-header.right { text-align: right; }
+.compare-job-header h3 { margin: 0 0 6px; color: #303133; }
+.compare-job-header p { margin: 4px 0; color: #909399; font-size: 13px; }
+.compare-salary { color: #f56c6c !important; font-weight: bold; }
+.skill-tag-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 </style>
