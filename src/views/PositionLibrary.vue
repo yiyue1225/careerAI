@@ -31,17 +31,34 @@
         <el-col :span="3">
           <el-button type="primary" :icon="Search" @click="applyFilter">筛选</el-button>
         </el-col>
-        <el-col :span="3" v-if="userStore.studentProfile">
-          <el-button
-            :type="sortByMatch ? 'warning' : 'default'"
-            :icon="Sort"
-            @click="sortByMatch = !sortByMatch"
-            :title="sortByMatch ? '取消匹配度排序' : '按匹配度降序'"
-          >
-            {{ sortByMatch ? '匹配排序 ✓' : '匹配排序' }}
-          </el-button>
-        </el-col>
       </el-row>
+
+      <!-- 排序栏 -->
+      <div class="sort-bar">
+        <span class="sort-label-text">排序：</span>
+        <button :class="['sort-btn', sortField === 'name' ? 'sort-btn-active' : '']" @click="toggleSort('name')">
+          岗位名称
+          <span class="sort-arrows">
+            <span :class="sortField === 'name' && sortOrder === 'asc' ? 'arrow-active' : ''">▲</span>
+            <span :class="sortField === 'name' && sortOrder === 'desc' ? 'arrow-active' : ''">▼</span>
+          </span>
+        </button>
+        <button :class="['sort-btn', sortField === 'salary' ? 'sort-btn-active' : '']" @click="toggleSort('salary')">
+          薪资
+          <span class="sort-arrows">
+            <span :class="sortField === 'salary' && sortOrder === 'asc' ? 'arrow-active' : ''">▲</span>
+            <span :class="sortField === 'salary' && sortOrder === 'desc' ? 'arrow-active' : ''">▼</span>
+          </span>
+        </button>
+        <button :class="['sort-btn', sortField === 'match' ? 'sort-btn-active' : '']" @click="toggleSort('match')">
+          匹配度
+          <span class="sort-arrows">
+            <span :class="sortField === 'match' && sortOrder === 'asc' ? 'arrow-active' : ''">▲</span>
+            <span :class="sortField === 'match' && sortOrder === 'desc' ? 'arrow-active' : ''">▼</span>
+          </span>
+        </button>
+        <button v-if="sortField" class="sort-btn sort-btn-clear" @click="sortField = ''">× 清除排序</button>
+      </div>
     </el-card>
 
     <!-- 技能筛选芯片（从岗位详情跳转时显示） -->
@@ -144,6 +161,7 @@
             <el-icon><Plus /></el-icon> 再选一个岗位
           </div>
         </div>
+        <el-button plain @click="compareList = []" round>清除全部</el-button>
         <el-button
           type="primary"
           :disabled="compareList.length < 2"
@@ -244,9 +262,10 @@ import { useRouter, useRoute } from 'vue-router'
 import * as echarts from 'echarts'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
-import { Search, PieChart, ArrowRight, TrendCharts, CircleClose, Plus, Filter, Sort } from '@element-plus/icons-vue'
+import { Search, PieChart, ArrowRight, TrendCharts, CircleClose, Plus, Filter } from '@element-plus/icons-vue'
 import { useUserStore } from '@/store'
 import RadarChart from '@/components/RadarChart.vue'
+import { calcMatchScore, getMatchTagType } from '@/utils/match'
 
 const router = useRouter()
 const route = useRoute()
@@ -321,35 +340,52 @@ const handlePageChange = (page: number) => {
 // ==========================================
 // 3. 匹配度计算 + 排序
 // ==========================================
-const sortByMatch = ref(false)
+const sortField = ref<'name' | 'salary' | 'match' | ''>('')
+const sortOrder = ref<'asc' | 'desc'>('desc')
+
+const parseSalaryToNum = (salaryStr: string) => {
+  if (!salaryStr) return 0
+  const m = salaryStr.match(/(\d+)/)
+  return m ? parseInt(m[1]) : 0
+}
+
+const toggleSort = (field: 'name' | 'salary' | 'match') => {
+  if (field === 'match' && !userStore.studentProfile) {
+    ElMessage.warning('请先上传简历以使用匹配度排序')
+    return
+  }
+  if (sortField.value === field) {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortField.value = field
+    sortOrder.value = 'desc'
+  }
+}
 
 const positionsWithMatch = computed(() => {
   const mapped = !studentProfile
     ? positions.value.map(pos => ({ ...pos, matchLevel: 0 }))
-    : positions.value.map(pos => {
-        const dims = ['professional', 'certificate', 'innovation', 'learning', 'stress', 'communication', 'internship']
-        let totalGap = 0
-        dims.forEach(d => {
-          const studentVal = studentProfile.dimensions[d] || 0
-          const posVal = pos.dimensions?.[d] || 0
-          totalGap += Math.abs(studentVal - posVal)
-        })
-        const avgGap = totalGap / dims.length
-        const match = Math.max(0, Math.min(100, 100 - avgGap))
-        return { ...pos, matchLevel: Math.round(match) }
-      })
+    : positions.value.map(pos => ({
+        ...pos,
+        matchLevel: calcMatchScore(studentProfile.dimensions, pos.dimensions || {})
+      }))
 
-  if (sortByMatch.value && studentProfile) {
-    return [...mapped].sort((a, b) => b.matchLevel - a.matchLevel)
-  }
-  return mapped
+  if (!sortField.value) return mapped
+
+  return [...mapped].sort((a, b) => {
+    let cmp = 0
+    if (sortField.value === 'name') {
+      cmp = (a.name || '').localeCompare(b.name || '', 'zh')
+    } else if (sortField.value === 'salary') {
+      cmp = parseSalaryToNum(a.salary) - parseSalaryToNum(b.salary)
+    } else if (sortField.value === 'match') {
+      cmp = a.matchLevel - b.matchLevel
+    }
+    return sortOrder.value === 'asc' ? cmp : -cmp
+  })
 })
 
-const getMatchLevelTag = (level: number) => {
-  if (level >= 80) return 'success'
-  if (level >= 60) return 'warning'
-  return 'danger'
-}
+const getMatchLevelTag = getMatchTagType
 
 // ==========================================
 // 4. 图表：饼图 + 技能热度横向柱状图
@@ -555,6 +591,65 @@ onUnmounted(() => {
   display: flex; align-items: center; gap: 8px;
   background: #ecf5ff; border: 1px solid #b3d8ff; border-radius: 8px;
   padding: 8px 16px; margin-bottom: 16px; font-size: 14px; color: #409eff;
+}
+
+/* 排序栏 */
+.sort-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #f0f2f5;
+}
+.sort-label-text {
+  font-size: 13px;
+  color: #909399;
+  white-space: nowrap;
+}
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border: 1px solid #dcdfe6;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  color: #606266;
+  transition: all 0.2s;
+  outline: none;
+}
+.sort-btn:hover {
+  border-color: #409eff;
+  color: #409eff;
+}
+.sort-btn-active {
+  border-color: #409eff;
+  color: #409eff;
+  background: #ecf5ff;
+  font-weight: 600;
+}
+.sort-btn-clear {
+  color: #f56c6c;
+  border-color: #fbc4c4;
+}
+.sort-btn-clear:hover {
+  background: #fef0f0;
+  border-color: #f56c6c;
+  color: #f56c6c;
+}
+.sort-arrows {
+  display: inline-flex;
+  flex-direction: column;
+  font-size: 9px;
+  line-height: 1;
+  gap: 1px;
+  color: #c0c4cc;
+}
+.arrow-active {
+  color: #409eff;
 }
 
 /* 底部悬浮对比栏 */

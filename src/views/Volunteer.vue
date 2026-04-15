@@ -85,9 +85,12 @@
                   <div class="tier-card-skills">
                     <el-tag v-for="s in (pos.requirements?.professionalSkills || []).slice(0,3)" :key="s" size="small" effect="plain">{{ s }}</el-tag>
                   </div>
-                  <el-button :type="isInWishlist(pos) ? 'warning' : 'default'" size="small" style="width:100%;margin-top:10px" @click="toggleWishlist(pos, 'rush')">
-                    {{ isInWishlist(pos) ? '✓ 已加入志愿' : '+ 加入冲刺志愿' }}
-                  </el-button>
+                  <div style="display:flex;gap:6px;margin-top:10px">
+                    <el-button :type="isInWishlist(pos) ? 'warning' : 'default'" size="small" style="flex:1" @click="toggleWishlist(pos, 'rush')">
+                      {{ isInWishlist(pos) ? '✓ 已加入' : '+ 加入冲刺' }}
+                    </el-button>
+                    <el-button size="small" plain @click="openGapAnalysis(pos)" title="查看技能差距与学习路径">差距分析</el-button>
+                  </div>
                 </el-card>
               </el-col>
             </el-row>
@@ -111,9 +114,12 @@
                   <div class="tier-card-skills">
                     <el-tag v-for="s in (pos.requirements?.professionalSkills || []).slice(0,3)" :key="s" size="small" effect="plain" type="primary">{{ s }}</el-tag>
                   </div>
-                  <el-button :type="isInWishlist(pos) ? 'primary' : 'default'" size="small" style="width:100%;margin-top:10px" @click="toggleWishlist(pos, 'stable')">
-                    {{ isInWishlist(pos) ? '✓ 已加入志愿' : '+ 加入稳健志愿' }}
-                  </el-button>
+                  <div style="display:flex;gap:6px;margin-top:10px">
+                    <el-button :type="isInWishlist(pos) ? 'primary' : 'default'" size="small" style="flex:1" @click="toggleWishlist(pos, 'stable')">
+                      {{ isInWishlist(pos) ? '✓ 已加入' : '+ 加入稳健' }}
+                    </el-button>
+                    <el-button size="small" plain @click="openGapAnalysis(pos)" title="查看技能差距与学习路径">差距分析</el-button>
+                  </div>
                 </el-card>
               </el-col>
             </el-row>
@@ -137,9 +143,12 @@
                   <div class="tier-card-skills">
                     <el-tag v-for="s in (pos.requirements?.professionalSkills || []).slice(0,3)" :key="s" size="small" effect="plain" type="success">{{ s }}</el-tag>
                   </div>
-                  <el-button :type="isInWishlist(pos) ? 'success' : 'default'" size="small" style="width:100%;margin-top:10px" @click="toggleWishlist(pos, 'safe')">
-                    {{ isInWishlist(pos) ? '✓ 已加入志愿' : '+ 加入保底志愿' }}
-                  </el-button>
+                  <div style="display:flex;gap:6px;margin-top:10px">
+                    <el-button :type="isInWishlist(pos) ? 'success' : 'default'" size="small" style="flex:1" @click="toggleWishlist(pos, 'safe')">
+                      {{ isInWishlist(pos) ? '✓ 已加入' : '+ 加入保底' }}
+                    </el-button>
+                    <el-button size="small" plain @click="openGapAnalysis(pos)" title="查看技能差距与学习路径">差距分析</el-button>
+                  </div>
                 </el-card>
               </el-col>
             </el-row>
@@ -257,6 +266,69 @@
         </div>
       </div>
 
+      <!-- 技能差距分析抽屉 -->
+      <el-drawer v-model="showGapDrawer" title="技能差距分析 & 学习路径" direction="rtl" size="520px">
+        <div v-if="selectedGapPos" class="gap-drawer-content">
+          <div class="gap-pos-title">
+            <h3>{{ selectedGapPos.name }}</h3>
+            <p style="color:#909399;font-size:13px">{{ selectedGapPos.company }} · {{ selectedGapPos.location }} · {{ selectedGapPos.salary }}</p>
+          </div>
+
+          <!-- 对比雷达图 -->
+          <div class="gap-section">
+            <div class="gap-section-title">能力对比雷达图</div>
+            <div style="height:280px">
+              <RadarChart :data="gapRadarData" />
+            </div>
+          </div>
+
+          <!-- 维度差距 -->
+          <div class="gap-section">
+            <div class="gap-section-title">维度差距分析</div>
+            <div v-for="item in gapDimensions" :key="item.key" class="dim-row">
+              <span class="dim-name">{{ item.label }}</span>
+              <div class="dim-bars">
+                <div class="dim-bar-row">
+                  <span class="bar-tag bar-mine">我</span>
+                  <el-progress :percentage="item.mine" :stroke-width="8" color="#5470c6" style="flex:1" :show-text="false" />
+                  <span class="bar-val">{{ item.mine }}</span>
+                </div>
+                <div class="dim-bar-row">
+                  <span class="bar-tag bar-job">岗</span>
+                  <el-progress :percentage="item.job" :stroke-width="8" :color="item.gap > 0 ? '#ee6666' : '#67c23a'" style="flex:1" :show-text="false" />
+                  <span class="bar-val">{{ item.job }}</span>
+                </div>
+              </div>
+              <el-tag v-if="item.gap > 0" type="danger" size="small" style="min-width:64px;text-align:center">差 {{ item.gap }}</el-tag>
+              <el-tag v-else type="success" size="small" style="min-width:64px;text-align:center">达标 ✓</el-tag>
+            </div>
+          </div>
+
+          <!-- 缺少的专业技能 -->
+          <div class="gap-section" v-if="missingSkills.length">
+            <div class="gap-section-title">待补充技能</div>
+            <div class="missing-skills">
+              <el-tag v-for="s in missingSkills" :key="s" type="danger" effect="plain" style="margin:4px">{{ s }}</el-tag>
+            </div>
+          </div>
+
+          <!-- 学习路径 -->
+          <div class="gap-section">
+            <div class="gap-section-title">建议学习路径</div>
+            <div class="learning-paths">
+              <div v-for="(item, i) in learningPaths" :key="i" class="path-item">
+                <span class="path-num">{{ i + 1 }}</span>
+                <div class="path-content">
+                  <div class="path-skill">{{ item.skill }}</div>
+                  <div class="path-desc">{{ item.desc }}</div>
+                </div>
+              </div>
+              <el-empty v-if="learningPaths.length === 0" description="当前能力已全面达标，继续保持！" :image-size="60" />
+            </div>
+          </div>
+        </div>
+      </el-drawer>
+
       <!-- 步骤 3：志愿报告 -->
       <div v-if="activeStep === 3" class="step-pane">
         <div id="volunteerReport" ref="reportRef">
@@ -289,7 +361,7 @@
             </el-col>
           </el-row>
 
-          <el-table :data="reportTableData" border stripe style="width:100%;margin-top:20px">
+          <el-table :data="reportTableData" border stripe style="width:100%;margin-top:20px" @row-click="row => openGapAnalysis(row)" row-class-name="clickable-row">
             <el-table-column label="志愿序号" width="90" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.tierTag" size="small">{{ row.tierLabel }}</el-tag>
@@ -332,6 +404,7 @@ import { useUserStore } from '@/store'
 import RadarChart from '@/components/RadarChart.vue'
 import axios from 'axios'
 import html2pdf from 'html2pdf.js'
+import { calcMatchScore } from '@/utils/match'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -368,12 +441,7 @@ const DIMS = ['professional', 'certificate', 'innovation', 'learning', 'stress',
 
 const calcMatch = (pos: any) => {
   if (!studentProfile.value) return 0
-  const d = studentProfile.value.dimensions
-  let totalGap = 0
-  DIMS.forEach(k => {
-    totalGap += Math.abs((d[k] || 0) - (pos.dimensions?.[k] || 0))
-  })
-  return Math.round(Math.max(0, Math.min(100, 100 - totalGap / DIMS.length)))
+  return calcMatchScore(studentProfile.value.dimensions, pos.dimensions || {})
 }
 
 const doRecommend = async () => {
@@ -473,6 +541,103 @@ const avgMatch = (list: any[]) => {
   if (!list.length) return 0
   return Math.round(list.reduce((s, p) => s + p.matchLevel, 0) / list.length)
 }
+
+// ==========================================
+// 技能差距分析
+// ==========================================
+const showGapDrawer = ref(false)
+const selectedGapPos = ref<any>(null)
+
+const openGapAnalysis = (pos: any) => {
+  selectedGapPos.value = pos
+  showGapDrawer.value = true
+}
+
+const gapRadarData = computed(() => {
+  if (!selectedGapPos.value || !studentProfile.value) return { indicator: [], series: [] }
+  const d = studentProfile.value.dimensions
+  const pd = selectedGapPos.value.dimensions || {}
+  return {
+    indicator: [
+      { name: '专业', max: 100 }, { name: '证书', max: 100 }, { name: '创新', max: 100 },
+      { name: '学习', max: 100 }, { name: '抗压', max: 100 }, { name: '沟通', max: 100 }, { name: '实习', max: 100 }
+    ],
+    series: [
+      { name: '我的能力', data: [[d.professional||0, d.certificate||0, d.innovation||0, d.learning||0, d.stress||0, d.communication||0, d.internship||0]] },
+      { name: '岗位要求', data: [[pd.professional||0, pd.certificate||0, pd.innovation||0, pd.learning||0, pd.stress||0, pd.communication||0, pd.internship||0]] }
+    ]
+  }
+})
+
+const gapDimensions = computed(() => {
+  if (!selectedGapPos.value || !studentProfile.value) return []
+  const d = studentProfile.value.dimensions
+  const pd = selectedGapPos.value.dimensions || {}
+  return DIMS.map(k => ({
+    key: k,
+    label: DIM_LABELS[k],
+    mine: d[k] || 0,
+    job: pd[k] || 0,
+    gap: Math.max(0, (pd[k] || 0) - (d[k] || 0))
+  }))
+})
+
+const missingSkills = computed(() => {
+  if (!selectedGapPos.value || !studentProfile.value) return []
+  const jobSkills: string[] = selectedGapPos.value.requirements?.professionalSkills || []
+  const mySkills: string[] = studentProfile.value.skills?.professionalSkills || []
+  return jobSkills.filter(s => !mySkills.some(ms => ms.toLowerCase().includes(s.toLowerCase()) || s.toLowerCase().includes(ms.toLowerCase())))
+})
+
+const SKILL_PATHS: Record<string, string> = {
+  'Java': '推荐：《Java核心技术》+ LeetCode练习 + Spring Boot项目实战',
+  'Python': '推荐：廖雪峰Python教程 + 数据分析项目实战',
+  'Go': '推荐：Go官方Tour + 微服务项目实战',
+  'MySQL': '重点掌握：索引优化、事务隔离、SQL调优',
+  'Redis': '重点掌握：缓存策略、持久化、分布式锁',
+  'Spring': '推荐：官方文档 + Spring全家桶项目',
+  '机器学习': '推荐：吴恩达Machine Learning课程 + Kaggle竞赛',
+  '深度学习': '推荐：Fast.ai + PyTorch实战项目',
+  '数据分析': '推荐：Pandas/Numpy + 数据可视化实战',
+  'Docker': '推荐：Docker官方文档 + K8s入门实践',
+  '前端': '推荐：Vue3/React官方文档 + 项目实战',
+  'React': '推荐：React官方文档 + 全栈项目',
+  'Vue': '推荐：Vue3官方文档 + Element Plus实战',
+  'TypeScript': '推荐：TypeScript Handbook + 类型体操练习',
+  '产品': '推荐：《人人都是产品经理》+ 竞品分析实练',
+}
+
+const DIM_PATHS: Record<string, string> = {
+  professional: '加强专业技能学习，参与更多技术项目实践',
+  certificate: '备考行业相关认证证书（如软考、PMP等）',
+  innovation: '参与创新创业竞赛（挑战杯、互联网+等）',
+  learning: '保持持续学习习惯，建立知识体系',
+  stress: '积极参与团队项目，提升抗压与时间管理能力',
+  communication: '参加演讲、辩论或跨团队协作项目',
+  internship: '寻找相关行业实习机会，积累实战经验',
+}
+
+const learningPaths = computed(() => {
+  if (!selectedGapPos.value || !studentProfile.value) return []
+  const paths: { skill: string; desc: string }[] = []
+
+  // 1. 基于缺失技能
+  const missing = missingSkills.value.slice(0, 3)
+  missing.forEach(skill => {
+    const key = Object.keys(SKILL_PATHS).find(k => skill.toLowerCase().includes(k.toLowerCase()) || k.toLowerCase().includes(skill.toLowerCase()))
+    paths.push({ skill, desc: key ? SKILL_PATHS[key] : `通过官方文档和实战项目掌握 ${skill}` })
+  })
+
+  // 2. 基于维度差距最大的前2个
+  const topGaps = gapDimensions.value.filter(d => d.gap > 10).sort((a, b) => b.gap - a.gap).slice(0, 2)
+  topGaps.forEach(d => {
+    if (!paths.some(p => p.skill === d.label)) {
+      paths.push({ skill: d.label, desc: DIM_PATHS[d.key] || '针对该维度加强针对性训练' })
+    }
+  })
+
+  return paths
+})
 
 const exportReport = () => {
   if (!reportRef.value) return
@@ -579,4 +744,28 @@ const exportReport = () => {
 
 /* Tier tabs */
 .tier-tabs { margin-bottom: 20px; }
+
+/* 差距分析抽屉 */
+.gap-drawer-content { padding: 0 4px; }
+.gap-pos-title { margin-bottom: 20px; }
+.gap-pos-title h3 { margin: 0 0 4px; font-size: 18px; color: #303133; }
+.gap-section { margin-bottom: 20px; }
+.gap-section-title { font-size: 14px; font-weight: 600; color: #303133; margin-bottom: 12px; padding-left: 8px; border-left: 3px solid #409eff; }
+.dim-row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.dim-name { width: 64px; font-size: 13px; color: #606266; flex-shrink: 0; }
+.dim-bars { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.dim-bar-row { display: flex; align-items: center; gap: 6px; }
+.bar-tag { font-size: 11px; font-weight: 700; width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.bar-mine { background: #ecf5ff; color: #5470c6; }
+.bar-job { background: #fef0f0; color: #ee6666; }
+.bar-val { font-size: 12px; color: #909399; width: 24px; text-align: right; }
+.missing-skills { display: flex; flex-wrap: wrap; gap: 6px; }
+.learning-paths { display: flex; flex-direction: column; gap: 12px; }
+.path-item { display: flex; gap: 12px; align-items: flex-start; }
+.path-num { width: 24px; height: 24px; border-radius: 50%; background: #409eff; color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.path-content { flex: 1; }
+.path-skill { font-size: 14px; font-weight: 600; color: #303133; margin-bottom: 4px; }
+.path-desc { font-size: 13px; color: #606266; line-height: 1.5; }
+:deep(.clickable-row) { cursor: pointer; }
+:deep(.clickable-row:hover td) { background: #f0f7ff !important; }
 </style>

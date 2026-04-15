@@ -12,11 +12,11 @@
       <el-col :span="8">
         <div class="banner-stats">
           <div class="stat-item">
-            <span class="stat-value">10,000+</span>
+            <span class="stat-value">4,595+</span>
             <span class="stat-label">岗位数据</span>
           </div>
           <div class="stat-item">
-            <span class="stat-value">85%</span>
+            <span class="stat-value">90%</span>
             <span class="stat-label">匹配准确率</span>
           </div>
           <div class="stat-item">
@@ -106,7 +106,7 @@ const router = useRouter()
 const stats = ref([
   { icon: Briefcase, value: '加载中...', label: '岗位总数', color: '#409eff' },
   { icon: User, value: '5,678', label: '注册学生', color: '#67c23a' },
-  { icon: DataLine, value: '85%', label: '匹配成功率', color: '#e6a23c' },
+  { icon: DataLine, value: '90%', label: '匹配成功率', color: '#e6a23c' },
   { icon: Medal, value: '98%', label: '用户满意度', color: '#f56c6c' },
 ])
 
