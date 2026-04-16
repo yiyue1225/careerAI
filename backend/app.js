@@ -462,7 +462,7 @@ app.post('/api/chat', upload.single('file'), async (req, res) => {
         const difyUrl = process.env.DIFY_API_URL;
 
         const payload = {
-            inputs: {},
+            inputs: req.body.inputs || {},
             query: message,
             response_mode: 'blocking',
             user: 'career-ai-user-' + Date.now(),

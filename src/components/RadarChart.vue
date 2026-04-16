@@ -1,5 +1,5 @@
 <template>
-  <div ref="chartRef" style="width: 100%; height: 100%; min-height: 300px"></div>
+  <div ref="chartRef" style="width: 100%; height: 100%; min-height: 450px"></div>
 </template>
 
 <script setup lang="ts">
@@ -90,9 +90,17 @@ function updateChart() {
         name: s.name,
         type: 'radar',
         symbol: 'circle',
-        symbolSize: 5,
+        symbolSize: 6,
         lineStyle: { color: p.color, width: 2 },
-        itemStyle: { color: p.color },
+        itemStyle: { color: p.color, borderColor: '#fff', borderWidth: 2 },
+        label: {
+          show: true,
+          color: p.color,
+          fontSize: 12,
+          fontWeight: 'bold',
+          distance: 8,
+          formatter: (params: any) => Math.round(params.value)
+        },
         areaStyle: {
           color: new echarts.graphic.RadialGradient(0.5, 0.5, 1, [
             { offset: 0, color: p.g1 },   // 中心：浅

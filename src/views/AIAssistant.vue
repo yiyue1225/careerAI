@@ -31,6 +31,17 @@
         </div>
         <h1 class="welcome-title">你好，我是你的职业助手</h1>
         <p class="welcome-sub">我可以帮你分析简历、匹配岗位、规划职业路径<br>也可以解答你关于求职的任何问题</p>
+
+        <!-- 已加载的简历提示 -->
+        <div v-if="userStore.studentProfile" class="profile-detected">
+          <div class="profile-detected-icon">✅</div>
+          <div class="profile-detected-text">
+            <p class="profile-name">已加载：{{ userStore.studentProfile.name }}</p>
+            <p class="profile-hint">我已检测到你的简历信息。你可以直接提问关于职业规划的问题，我会基于你的能力画像提供建议。</p>
+          </div>
+        </div>
+
+        <p style="font-size:12px;color:#999;margin-top:8px;display:block">💡 提示：上传简历会自动同步到「我的能力画像」</p>
         <div class="suggestion-grid">
           <button
             v-for="q in quickQuestions"
@@ -71,8 +82,11 @@
       <div v-if="loading" class="msg-row assistant thinking-row">
         <div class="ai-avatar-sm thinking-avatar">✦</div>
         <div class="ai-msg-body">
-          <div class="thinking-dots">
-            <span></span><span></span><span></span>
+          <div class="thinking-status">
+            <div class="thinking-dots">
+              <span></span><span></span><span></span>
+            </div>
+            <span class="thinking-label">思考中<span class="thinking-timer">{{ thinkingSeconds }}s</span></span>
           </div>
         </div>
       </div>
@@ -93,7 +107,7 @@
           <span class="attach-size">{{ formatFileSize(attachedFile.size) }}</span>
           <button class="attach-remove" @click="attachedFile = null" title="移除附件">×</button>
         </div>
-        <span class="attach-hint">发送后 AI 将分析此文件</span>
+        <span class="attach-hint">✓ 发送后将自动解析并保存到「我的能力画像」</span>
       </div>
 
       <div class="input-wrapper" :class="{ focused: inputFocused }">
@@ -123,10 +137,10 @@
         />
         <button
           class="send-button"
-          :class="{ active: (inputText.trim() || attachedFile) && !loading }"
-          :disabled="(!inputText.trim() && !attachedFile) || loading"
+          :class="{ active: (inputText.trim() || attachedFile) && !loading && !isAnalyzingResume }"
+          :disabled="(!inputText.trim() && !attachedFile) || loading || isAnalyzingResume"
           @click="sendMessage"
-          title="发送 (Enter)"
+          :title="isAnalyzingResume ? '简历解析中...' : '发送 (Enter)'"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
@@ -141,6 +155,7 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/store'
 
 interface Message {
   id: number
@@ -151,6 +166,7 @@ interface Message {
 
 let msgIdCounter = 0
 
+const userStore = useUserStore()
 const messages = ref<Message[]>([])
 const inputText = ref('')
 const loading = ref(false)
@@ -161,6 +177,9 @@ const textareaRef = ref<HTMLTextAreaElement>()
 const fileInputRef = ref<HTMLInputElement>()
 const attachedFile = ref<File | null>(null)
 const conversationId = ref('')
+const isAnalyzingResume = ref(false)  // 标记简历解析中
+const thinkingSeconds = ref(0)
+let thinkingTimer: ReturnType<typeof setInterval> | null = null
 
 const quickQuestions = [
   { icon: '📄', text: '帮我分析一下我的简历有哪些不足' },
@@ -193,7 +212,9 @@ const renderMarkdown = (text: string): string => {
   // 斜体
   html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
 
-  // 标题 ### ## #
+  // 标题 ##### #### ### ## #
+  html = html.replace(/^##### (.+)$/gm, '<h6 class="md-h6">$1</h6>')
+  html = html.replace(/^#### (.+)$/gm, '<h5 class="md-h5">$1</h5>')
   html = html.replace(/^### (.+)$/gm, '<h4 class="md-h4">$1</h4>')
   html = html.replace(/^## (.+)$/gm, '<h3 class="md-h3">$1</h3>')
   html = html.replace(/^# (.+)$/gm, '<h2 class="md-h2">$1</h2>')
@@ -253,7 +274,7 @@ const onFileSelect = (e: Event) => {
     return
   }
   attachedFile.value = file
-  ElMessage.success(`已选择：${file.name}`)
+  ElMessage.success(`已选择：${file.name}\n点击发送按钮即可自动解析`)
   // 重置 input，允许重复选同一文件
   if (fileInputRef.value) fileInputRef.value.value = ''
 }
@@ -268,47 +289,90 @@ const sendMessage = async () => {
   const text = inputText.value.trim()
   const file = attachedFile.value
   if (!text && !file) return
-  if (loading.value) return
+  if (loading.value || isAnalyzingResume.value) return
 
-  // 显示用户消息（带文件提示）
-  const displayText = file
-    ? (text ? `📎 ${file.name}\n\n${text}` : `📎 ${file.name}\n\n请分析这份简历`)
-    : text
-  addMessage('user', displayText)
+  const baseURL = import.meta.env.VITE_API_BASE_URL ?? ''
 
-  const messageToSend = text || '请帮我分析这份简历，提取技能和能力评估。'
-  inputText.value = ''
-  attachedFile.value = null
-  resetTextareaHeight()
-  loading.value = true
-  scrollToBottom()
+  // 如果有文件，先进行简历解析
+  if (file) {
+    isAnalyzingResume.value = true
+    addMessage('user', `📎 ${file.name}\n\n(正在解析简历，请稍候...)`)
 
-  try {
-    const baseURL = import.meta.env.VITE_API_BASE_URL ?? ''
-    let res: Response
-
-    if (file) {
-      // 有文件：用 FormData 发送
+    try {
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('message', messageToSend)
-      if (conversationId.value) formData.append('conversationId', conversationId.value)
 
-      res = await fetch(`${baseURL}/api/chat`, {
+      const analyzeRes = await fetch(`${baseURL}/api/analyze`, {
         method: 'POST',
         body: formData,
       })
-    } else {
-      // 纯文字
-      res = await fetch(`${baseURL}/api/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: messageToSend,
-          conversationId: conversationId.value || undefined,
-        }),
-      })
+
+      const analyzeData = await analyzeRes.json()
+      if (analyzeData.code === 0) {
+        // 保存解析结果到Pinia store
+        userStore.setStudentProfile({
+          dimensions: analyzeData.data.dimensions,
+          skills: analyzeData.data.skills,
+          source: analyzeData.data.source || 'ai',
+        })
+
+        ElMessage.success('✓ 简历解析完成，已保存到「我的能力画像」')
+
+        // 更新消息
+        const sourceTag = analyzeData.data.source === 'fallback' ? '（本地分析）' : '（AI分析）'
+        addMessage('assistant', `已完成简历解析 ${sourceTag}，你现在可以询问我任何职业相关的问题。例如：\n- 分析我的优势和不足\n- 推荐适合我的岗位\n- 制定职业发展计划`)
+      } else {
+        throw new Error(analyzeData.message || '解析失败')
+      }
+    } catch (err: any) {
+      addMessage('assistant', `简历解析失败：${err.message || '请稍后重试'}`)
+    } finally {
+      isAnalyzingResume.value = false
+      inputText.value = ''
+      attachedFile.value = null
+      resetTextareaHeight()
     }
+    return
+  }
+
+  // 显示用户消息（纯文字）
+  addMessage('user', text)
+  inputText.value = ''
+  resetTextareaHeight()
+  loading.value = true
+  thinkingSeconds.value = 0
+  thinkingTimer = setInterval(() => { thinkingSeconds.value++ }, 1000)
+  scrollToBottom()
+
+  try {
+    // 纯文字对话
+    const profile = userStore.studentProfile
+    const inputs: any = {}
+
+    // 强化提示词：要求 AI 不要输出引用、工具调用过程等
+    let finalMessage = text;
+    if (!conversationId.value) {
+      finalMessage += "\n(请直接给出你的职业建议或回答，不要输出任何关于'调用本地知识库'、'使用工具'、'引用'等元数据信息或调试信息。)"
+    }
+
+    // 如果有简历，传给 Dify 的 user_resume 变量
+    if (profile) {
+      // 构造一段简洁的简历摘要传给 user_resume 变量
+      const resumeInfo = `姓名: ${profile.name || '未知'}, 专业: ${profile.major || '未知'}, 年级: ${profile.grade || '未知'}。
+技能: ${profile.skills?.professionalSkills?.join(', ') || '未提取'}。
+能力维度: 专业${profile.dimensions?.professional}, 证书${profile.dimensions?.certificate}, 创新${profile.dimensions?.innovation}, 学习${profile.dimensions?.learning}, 抗压${profile.dimensions?.stress}, 沟通${profile.dimensions?.communication}, 实习${profile.dimensions?.internship}。`
+      inputs.user_resume = resumeInfo
+    }
+
+    const res = await fetch(`${baseURL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: text,
+        conversationId: conversationId.value || undefined,
+        inputs: inputs
+      }),
+    })
 
     const data = await res.json()
     if (data.code === 0) {
@@ -320,6 +384,7 @@ const sendMessage = async () => {
   } catch (err: any) {
     addMessage('assistant', '抱歉，我现在无法响应，请检查网络连接或稍后重试。')
   } finally {
+    if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null }
     loading.value = false
   }
 }
@@ -431,7 +496,44 @@ onMounted(() => {
 }
 .welcome-logo-icon { color: #fff; font-size: 28px; }
 .welcome-title { font-size: 28px; font-weight: 700; color: #111; margin: 0 0 12px; }
-.welcome-sub { font-size: 15px; color: #888; line-height: 1.7; margin: 0 0 36px; }
+.welcome-sub { font-size: 15px; color: #888; line-height: 1.7; margin: 0 0 24px; }
+
+.profile-detected {
+  background: linear-gradient(135deg, #ecf5ff 0%, #f0f9ff 100%);
+  border: 1px solid #b3d8ff;
+  border-radius: 12px;
+  padding: 16px 20px;
+  margin: 0 0 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.profile-detected-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.profile-detected-text {
+  text-align: left;
+}
+
+.profile-name {
+  margin: 0 0 4px;
+  font-weight: 600;
+  color: #409eff;
+  font-size: 14px;
+}
+
+.profile-hint {
+  margin: 0;
+  font-size: 13px;
+  color: #666;
+  line-height: 1.5;
+}
 
 .suggestion-grid {
   display: grid;
@@ -492,6 +594,17 @@ onMounted(() => {
 .user-meta { text-align: right; }
 
 /* 思考动画 */
+.thinking-status {
+  display: flex; align-items: center; gap: 10px;
+}
+.thinking-label {
+  font-size: 14px; color: #888;
+  display: flex; align-items: center; gap: 4px;
+}
+.thinking-timer {
+  font-size: 13px; color: #6366f1; font-weight: 600;
+  min-width: 28px;
+}
 .thinking-dots {
   display: flex; gap: 5px; align-items: center; padding: 8px 4px;
 }
@@ -532,6 +645,8 @@ onMounted(() => {
 .ai-msg-text :deep(.md-h2) { font-size: 18px; font-weight: 700; margin: 14px 0 6px; color: #111; }
 .ai-msg-text :deep(.md-h3) { font-size: 16px; font-weight: 600; margin: 12px 0 4px; color: #222; }
 .ai-msg-text :deep(.md-h4) { font-size: 15px; font-weight: 600; margin: 10px 0 4px; color: #333; }
+.ai-msg-text :deep(.md-h5) { font-size: 14px; font-weight: 600; margin: 8px 0 4px; color: #444; }
+.ai-msg-text :deep(.md-h6) { font-size: 13px; font-weight: 600; margin: 6px 0 4px; color: #555; }
 .ai-msg-text :deep(.md-ul), .ai-msg-text :deep(.md-ol) {
   padding-left: 20px; margin: 8px 0;
 }
