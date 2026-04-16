@@ -353,22 +353,28 @@ app.post('/api/analyze', upload.single('resume'), async (req, res) => {
         }
 
         // 尝试调用 Dify Agent API（流式）
-        const difyKey = process.env.DIFY_API_KEY_EXTRACT_JOB_INFO;
+        const difyKey = process.env.DIFY_API_KEY_RESUME_ANALYSIS;
         const difyUrl = process.env.DIFY_API_URL;
 
         if (difyKey && difyUrl) {
             try {
+                // 文字模式：本地提取简历文字后通过 inputs.resume_text 发给 Dify
+                // （Dify Agent 需在变量中添加名为 resume_text 的文本变量）
+                const chatPayload = {
+                    inputs: { resume_text: resumeText.substring(0, 4000) },
+                    query: '请分析简历并严格按JSON格式返回结果',
+                    response_mode: 'streaming',
+                    user: 'resume-user-' + Date.now(),
+                    conversation_id: '',
+                };
+
+                console.log('发送给 Dify，文字长度:', resumeText.length);
+
                 // Agent 类型不支持 blocking，必须用 streaming 流式接收
                 const difyRes = await axios({
                     method: 'post',
                     url: `${difyUrl}/chat-messages`,
-                    data: {
-                        inputs: { resume_text: resumeText.substring(0, 4000) },
-                        query: '请分析简历',
-                        response_mode: 'streaming',
-                        user: 'resume-user-' + Date.now(),
-                        conversation_id: '',
-                    },
+                    data: chatPayload,
                     headers: {
                         Authorization: `Bearer ${difyKey}`,
                         'Content-Type': 'application/json',
@@ -445,30 +451,98 @@ app.get('/api/skill-stats', async (req, res) => {
     }
 });
 
-// 6. AI 聊天助手接口（代理 Dify Chatbot）
-app.post('/api/chat', async (req, res) => {
+// 6. AI 聊天助手接口（代理 Dify Chatbot，支持可选文件上传）
+app.post('/api/chat', upload.single('file'), async (req, res) => {
     try {
-        const { message, conversationId } = req.body;
+        const message = req.body.message;
+        const conversationId = req.body.conversationId;
         if (!message) return res.status(400).json({ code: 400, message: '消息不能为空' });
+
+        const difyKey = process.env.DIFY_API_KEY;
+        const difyUrl = process.env.DIFY_API_URL;
 
         const payload = {
             inputs: {},
             query: message,
             response_mode: 'blocking',
-            user: 'career-ai-user',
+            user: 'career-ai-user-' + Date.now(),
         };
         if (conversationId) payload.conversation_id = conversationId;
 
-        const response = await axios.post(
-            `${process.env.DIFY_API_URL}/chat-messages`,
-            payload,
-            { headers: { Authorization: `Bearer ${process.env.DIFY_API_KEY}`, 'Content-Type': 'application/json' } }
-        );
+        // 如果携带了文件，先上传到 Dify，再把 file_id 附加到消息
+        if (req.file) {
+            try {
+                const FormDataLib = require('form-data');
+                const fileForm = new FormDataLib();
+                fileForm.append('file', req.file.buffer, {
+                    filename: req.file.originalname,
+                    contentType: req.file.mimetype || 'application/octet-stream',
+                });
+                fileForm.append('user', payload.user);
+
+                const uploadRes = await axios.post(`${difyUrl}/files/upload`, fileForm, {
+                    headers: {
+                        ...fileForm.getHeaders(),
+                        Authorization: `Bearer ${difyKey}`,
+                    },
+                    timeout: 30000,
+                });
+
+                const fileId = uploadRes.data?.id;
+                if (fileId) {
+                    payload.files = [{
+                        type: 'document',
+                        transfer_method: 'local_file',
+                        upload_file_id: fileId,
+                    }];
+                    console.log('Chat 文件上传成功:', fileId, req.file.originalname);
+                }
+            } catch (uploadErr) {
+                // 文件上传失败不中断，只用文字继续
+                console.warn('Chat 文件上传失败，仅用文字:', uploadErr.message);
+                payload.query = `[附件：${req.file.originalname}]\n\n${message}`;
+            }
+        }
+
+        // Agent 类型必须用 streaming，不支持 blocking
+        payload.response_mode = 'streaming';
+
+        const difyRes = await axios({
+            method: 'post',
+            url: `${difyUrl}/chat-messages`,
+            data: payload,
+            headers: { Authorization: `Bearer ${difyKey}`, 'Content-Type': 'application/json' },
+            timeout: 60000,
+            responseType: 'stream',
+        });
+
+        // 收集 SSE 流，拼接 answer
+        let fullAnswer = '';
+        let returnedConvId = '';
+        await new Promise((resolve, reject) => {
+            difyRes.data.on('data', (chunk) => {
+                const lines = chunk.toString().split('\n');
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    const jsonStr = line.slice(6).trim();
+                    if (!jsonStr || jsonStr === '[DONE]') continue;
+                    try {
+                        const parsed = JSON.parse(jsonStr);
+                        if ((parsed.event === 'agent_message' || parsed.event === 'message') && parsed.answer) {
+                            fullAnswer += parsed.answer;
+                        }
+                        if (parsed.conversation_id) returnedConvId = parsed.conversation_id;
+                    } catch {}
+                }
+            });
+            difyRes.data.on('end', resolve);
+            difyRes.data.on('error', reject);
+        });
 
         res.json({
             code: 0,
-            answer: response.data.answer,
-            conversationId: response.data.conversation_id,
+            answer: fullAnswer || '抱歉，我没有生成回复，请重试。',
+            conversationId: returnedConvId,
         });
     } catch (error) {
         console.error('Chat API Error:', error.response?.data || error.message);

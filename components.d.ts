@@ -11,7 +11,6 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
-    ElAlert: typeof import('element-plus/es')['ElAlert']
     ElAside: typeof import('element-plus/es')['ElAside']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElCard: typeof import('element-plus/es')['ElCard']
@@ -53,6 +52,7 @@ declare module 'vue' {
     ElUpload: typeof import('element-plus/es')['ElUpload']
     HelloWorld: typeof import('./src/components/HelloWorld.vue')['default']
     Layout: typeof import('./src/components/Layout.vue')['default']
+    PositionAnalysis: typeof import('./src/components/PositionAnalysis.vue')['default']
     RadarChart: typeof import('./src/components/RadarChart.vue')['default']
     RelationGraph: typeof import('./src/components/RelationGraph.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
