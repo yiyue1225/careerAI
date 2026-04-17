@@ -505,19 +505,23 @@ const sendMessage = async () => {
 
   try {
     const profile = userStore.studentProfile
-    const inputs: any = {}
+    let inputs: any = {}
 
     let finalMessage = text
     if (!conversationId.value) {
+      // 仅在第一轮对话时注入简历信息和约束
       finalMessage += "\n(请直接给出你的职业建议或回答，不要输出任何关于'调用本地知识库'、'使用工具'、'引用'等元数据信息或调试信息。)"
-    }
 
-    if (userStore.resumeText) {
-      inputs.user_resume = userStore.resumeText.substring(0, 3000)
-    } else if (profile) {
-      inputs.user_resume = `姓名: ${profile.name || '未知'}, 专业: ${profile.major || '未知'}, 年级: ${profile.grade || '未知'}。
-技能: ${profile.skills?.professionalSkills?.join(', ') || '未提取'}。
-能力维度: 专业${profile.dimensions?.professional}, 证书${profile.dimensions?.certificate}, 创新${profile.dimensions?.innovation}, 学习${profile.dimensions?.learning}, 抗压${profile.dimensions?.stress}, 沟通${profile.dimensions?.communication}, 实习${profile.dimensions?.internship}。`
+      if (userStore.resumeText) {
+        inputs.user_resume = userStore.resumeText.substring(0, 3000)
+      } else if (profile) {
+        inputs.user_resume = `姓名: ${profile.name || '未知'}, 专业: ${profile.major || '未知'}, 年级: ${profile.grade || '未知'}。
+  技能: ${profile.skills?.professionalSkills?.join(', ') || '未提取'}。
+  能力维度: 专业${profile.dimensions?.professional}, 证书${profile.dimensions?.certificate}, 创新${profile.dimensions?.innovation}, 学习${profile.dimensions?.learning}, 抗压${profile.dimensions?.stress}, 沟通${profile.dimensions?.communication}, 实习${profile.dimensions?.internship}。`
+      }
+    } else {
+      // 后续对话不再重复发送 inputs，避免 Dify Agent 内部校验失败
+      inputs = {}
     }
 
     const res = await fetch(`${baseURL}/api/chat`, {
@@ -527,11 +531,22 @@ const sendMessage = async () => {
         message: finalMessage,
         conversationId: conversationId.value || undefined,
         inputs,
+        userId: (() => {
+          let id = localStorage.getItem('careerAI_anonymous_id')
+          if (!id) {
+            id = 'user_' + Math.random().toString(36).substring(2, 11)
+            localStorage.setItem('careerAI_anonymous_id', id)
+          }
+          return id
+        })(),
       }),
     })
 
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}))
+      if (res.status === 404) {
+        conversationId.value = '' // 会话失效，清空 ID
+      }
       throw new Error(errorData.message || `请求失败 (${res.status})`)
     }
     if (!res.body) throw new Error('响应正文为空')

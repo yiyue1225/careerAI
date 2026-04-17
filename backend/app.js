@@ -537,13 +537,36 @@ app.post('/api/chat', upload.single('file'), async (req, res) => {
         const difyKey = process.env.DIFY_API_KEY;
         const difyUrl = process.env.DIFY_API_URL;
 
+        let finalInputs = {};
+        if (req.body.inputs) {
+            if (typeof req.body.inputs === 'string') {
+                try {
+                    finalInputs = JSON.parse(req.body.inputs);
+                } catch (e) {
+                    console.error('Inputs Parse Error:', e.message);
+                    finalInputs = {};
+                }
+            } else {
+                finalInputs = req.body.inputs;
+            }
+        }
+
         const payload = {
-            inputs: req.body.inputs ? (typeof req.body.inputs === 'string' ? JSON.parse(req.body.inputs) : req.body.inputs) : {},
             query: message,
             response_mode: 'streaming',
-            user: 'career-ai-user-' + Date.now(),
+            user: req.body.userId || ('career-ai-user-' + Date.now()),
         };
+        // 只有当 finalInputs 非空时才添加 inputs 字段
+        if (Object.keys(finalInputs).length > 0) {
+            payload.inputs = finalInputs;
+        } else {
+            // Dify 有时要求必须有 inputs，即便为空。如果上面不行，就保留空对象。
+            payload.inputs = {};
+        }
+
         if (conversationId) payload.conversation_id = conversationId;
+
+        console.log('Final Payload to Dify:', JSON.stringify(payload));
 
         // 如果携带了文件，先上传到 Dify
         if (req.file) {
@@ -588,11 +611,20 @@ app.post('/api/chat', upload.single('file'), async (req, res) => {
         difyRes.data.on('data', (chunk) => {
             const lines = chunk.toString().split('\n');
             for (const line of lines) {
-                if (!line.startsWith('data: ')) continue;
+                if (!line.startsWith('data: ')) {
+                    if (line.trim()) console.log('Non-data SSE line:', line);
+                    continue;
+                }
                 const jsonStr = line.slice(6).trim();
                 if (!jsonStr || jsonStr === '[DONE]') continue;
                 try {
                     const parsed = JSON.parse(jsonStr);
+                    // 捕获 Dify 错误事件
+                    if (parsed.event === 'error' || parsed.code || parsed.status === 'error') {
+                        console.error('Dify Error Event:', parsed);
+                        res.write(`data: ${JSON.stringify({ type: 'error', message: parsed.message || 'Dify 服务报错' })}\n\n`);
+                        continue;
+                    }
                     if (parsed.conversation_id) returnedConvId = parsed.conversation_id;
                     if ((parsed.event === 'agent_message' || parsed.event === 'message') && parsed.answer) {
                         res.write(`data: ${JSON.stringify({ type: 'chunk', answer: parsed.answer, conversationId: returnedConvId })}\n\n`);
@@ -600,7 +632,9 @@ app.post('/api/chat', upload.single('file'), async (req, res) => {
                     if (parsed.event === 'message_end') {
                         res.write(`data: ${JSON.stringify({ type: 'done', conversationId: returnedConvId })}\n\n`);
                     }
-                } catch {}
+                } catch (e) {
+                    console.error('SSE JSON Parse Error:', e.message, jsonStr);
+                }
             }
         });
         difyRes.data.on('end', () => {
@@ -613,7 +647,27 @@ app.post('/api/chat', upload.single('file'), async (req, res) => {
         });
 
     } catch (error) {
-        console.error('Chat API Error:', error.response?.data || error.message);
+        if (error.response) {
+            // 如果是因为 conversation_id 不存在导致的错误
+            const isNotFound = error.response.status === 404;
+            // 打印具体的 Dify 错误详情
+            if (error.response.data && typeof error.response.data.on === 'function') {
+                error.response.data.on('data', (c) => console.error('Dify Error Chunk:', c.toString()));
+            } else {
+                console.error('Dify API Error Body:', error.response.data);
+            }
+
+            if (isNotFound && conversationId) {
+                console.warn('Conversation ID not found in Dify, signaling frontend to reset ID...');
+                if (!res.headersSent) {
+                    res.status(404).json({ code: 404, message: '当前会话已失效，正在为您开启新对话，请再次发送。' });
+                }
+                return;
+            }
+        } else {
+            console.error('Chat API Error:', error.message);
+        }
+
         if (!res.headersSent) {
             res.status(500).json({ code: 500, message: 'AI 助手暂时不可用，请稍后再试' });
         }
