@@ -314,77 +314,48 @@ const submitFillDialog = () => {
   sendMessage()
 }
 
+import { marked } from 'marked'
+import katex from 'katex'
+import 'katex/dist/katex.min.css'
+
+// 配置 marked 选项
+marked.setOptions({
+  breaks: true,
+  gfm: true,
+})
+
 // ==========================================
 // Markdown 渲染
 // ==========================================
 const renderMarkdown = (text: string): string => {
   if (!text) return ''
-  let html = text
+  try {
+    let processedText = text
 
-  // 代码块（```lang\n...\n```）
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-    const escaped = code.replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    return `<div class="code-block"><div class="code-lang">${lang || 'code'}</div><pre><code>${escaped}</code></pre></div>`
-  })
+    // 1. 处理块级公式 $$ ... $$
+    processedText = processedText.replace(/\$\$\s*([\s\S]*?)\s*\$\$/g, (match, formula) => {
+      try {
+        return `<div class="md-math-block">${katex.renderToString(formula, { displayMode: true, throwOnError: false })}</div>`
+      } catch (err) {
+        return match
+      }
+    })
 
-  // 行内代码
-  html = html.replace(/`([^`\n]+)`/g, '<code class="inline-code">$1</code>')
+    // 2. 处理行内公式 $ ... $ (排除金额等情况，要求 $ 紧贴内容)
+    processedText = processedText.replace(/\$([^\$\s](?:[^\$]*[^\$\s])?)\$/g, (match, formula) => {
+      try {
+        return katex.renderToString(formula, { displayMode: false, throwOnError: false })
+      } catch (err) {
+        return match
+      }
+    })
 
-  // 粗体
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-
-  // 斜体
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
-
-  // 标题 ##### #### ### ## #
-  html = html.replace(/^##### (.+)$/gm, '<h6 class="md-h6">$1</h6>')
-  html = html.replace(/^#### (.+)$/gm, '<h5 class="md-h5">$1</h5>')
-  html = html.replace(/^### (.+)$/gm, '<h4 class="md-h4">$1</h4>')
-  html = html.replace(/^## (.+)$/gm, '<h3 class="md-h3">$1</h3>')
-  html = html.replace(/^# (.+)$/gm, '<h2 class="md-h2">$1</h2>')
-
-  // 有序列表（整块处理）
-  html = html.replace(/((?:^\d+\. .+\n?)+)/gm, (block) => {
-    const items = block.trim().split('\n').map(line =>
-      `<li>${line.replace(/^\d+\. /, '')}</li>`
-    ).join('')
-    return `<ol class="md-ol">${items}</ol>`
-  })
-
-  // 无序列表
-  html = html.replace(/((?:^[-*] .+\n?)+)/gm, (block) => {
-    const items = block.trim().split('\n').map(line =>
-      `<li>${line.replace(/^[-*] /, '')}</li>`
-    ).join('')
-    return `<ul class="md-ul">${items}</ul>`
-  })
-
-  // Markdown 表格（| col | col | 格式）
-  html = html.replace(/((?:^\|.+\|\n?)+)/gm, (block) => {
-    const rows = block.trim().split('\n').filter(r => r.trim())
-    if (rows.length < 2) return block
-    const isSep = (r: string) => /^\|[\s|:-]+\|$/.test(r.trim())
-    // 找分隔行索引
-    const sepIdx = rows.findIndex(isSep)
-    if (sepIdx === -1) return block
-    const headerRow = rows[0]
-    const dataRows = rows.slice(sepIdx + 1)
-    const parseCells = (row: string) =>
-      row.replace(/^\||\|$/g, '').split('|').map(c => c.trim())
-    const headers = parseCells(headerRow).map(c => `<th>${c}</th>`).join('')
-    const bodyHtml = dataRows.map(row =>
-      `<tr>${parseCells(row).map(c => `<td>${c}</td>`).join('')}</tr>`
-    ).join('')
-    return `<table class="md-table"><thead><tr>${headers}</tr></thead><tbody>${bodyHtml}</tbody></table>`
-  })
-
-  // 分割线
-  html = html.replace(/^---$/gm, '<hr class="md-hr">')
-
-  // 换行（非 HTML 标签内）
-  html = html.replace(/\n(?!<)/g, '<br>')
-
-  return html
+    // 3. 使用 marked 渲染剩余部分
+    return marked.parse(processedText) as string
+  } catch (e) {
+    console.error('Markdown Parse Error:', e)
+    return text
+  }
 }
 
 // ==========================================
@@ -562,19 +533,55 @@ const sendMessage = async () => {
     const decoder = new TextDecoder()
     let buf = ''
 
+    // --- 平滑打字机逻辑 ---
+    let fullText = '' // 已接收到的完整文本
+    let displayedText = '' // 界面上显示的文本
+    let queue: string[] = [] // 待显示的字符队列
+    let typingTimer: any = null
+
+    const startTyping = () => {
+      if (typingTimer) return
+      typingTimer = setInterval(() => {
+        if (queue.length > 0) {
+          // 每次取出 1-2 个字符，根据队列长度动态调整速度
+          const speed = queue.length > 50 ? 3 : (queue.length > 10 ? 2 : 1)
+          for (let i = 0; i < speed; i++) {
+            const char = queue.shift()
+            if (char) {
+              displayedText += char
+              messages.value[msgIndex].content = displayedText
+            }
+          }
+          if (isNearBottom()) scrollToBottom(false)
+        } else if (doneReading) {
+          // 读取结束且队列清空
+          clearInterval(typingTimer)
+          typingTimer = null
+        }
+      }, 25) // 25ms 刷新率，体感最流畅
+    }
+
+    let doneReading = false
     while (true) {
       const { done, value } = await reader.read()
-      if (done) break
+      if (done) {
+        doneReading = true
+        break
+      }
+
       buf += decoder.decode(value, { stream: true })
       const lines = buf.split('\n')
       buf = lines.pop() ?? ''
+
       for (const line of lines) {
         if (!line.startsWith('data: ')) continue
         try {
           const parsed = JSON.parse(line.slice(6))
           if (parsed.type === 'chunk' && parsed.answer) {
-            messages.value[msgIndex].content += parsed.answer
-            if (isNearBottom()) scrollToBottom(false)
+            fullText += parsed.answer
+            // 将新收到的字符推入展示队列
+            queue.push(...parsed.answer.split(''))
+            startTyping()
           }
           if (parsed.type === 'done' && parsed.conversationId) {
             conversationId.value = parsed.conversationId
@@ -851,37 +858,57 @@ onMounted(() => {
   background: #f3f3f3; color: #d14; padding: 1px 6px;
   border-radius: 4px; font-size: 13px; font-family: monospace;
 }
-.ai-msg-text :deep(.md-h2) { font-size: 18px; font-weight: 700; margin: 14px 0 6px; color: #111; }
-.ai-msg-text :deep(.md-h3) { font-size: 16px; font-weight: 600; margin: 12px 0 4px; color: #222; }
-.ai-msg-text :deep(.md-h4) { font-size: 15px; font-weight: 600; margin: 10px 0 4px; color: #333; }
-.ai-msg-text :deep(.md-h5) { font-size: 14px; font-weight: 600; margin: 8px 0 4px; color: #444; }
-.ai-msg-text :deep(.md-h6) { font-size: 13px; font-weight: 600; margin: 6px 0 4px; color: #555; }
-.ai-msg-text :deep(.md-ul), .ai-msg-text :deep(.md-ol) {
+.ai-msg-text :deep(h1) { font-size: 20px; font-weight: 700; margin: 16px 0 8px; color: #111; }
+.ai-msg-text :deep(h2) { font-size: 18px; font-weight: 700; margin: 14px 0 6px; color: #111; }
+.ai-msg-text :deep(h3) { font-size: 16px; font-weight: 600; margin: 12px 0 4px; color: #222; }
+.ai-msg-text :deep(h4) { font-size: 15px; font-weight: 600; margin: 10px 0 4px; color: #333; }
+.ai-msg-text :deep(h5) { font-size: 14px; font-weight: 600; margin: 8px 0 4px; color: #444; }
+.ai-msg-text :deep(h6) { font-size: 13px; font-weight: 600; margin: 6px 0 4px; color: #555; }
+.ai-msg-text :deep(ul), .ai-msg-text :deep(ol) {
   padding-left: 20px; margin: 8px 0;
 }
 .ai-msg-text :deep(li) { margin: 4px 0; line-height: 1.7; }
-.ai-msg-text :deep(.md-hr) { border: none; border-top: 1px solid #e8e8e8; margin: 14px 0; }
+.ai-msg-text :deep(hr) { border: none; border-top: 1px solid #e8e8e8; margin: 14px 0; }
 .ai-msg-text :deep(strong) { font-weight: 600; color: #111; }
-.ai-msg-text :deep(.md-table) {
+.ai-msg-text :deep(table) {
   border-collapse: collapse;
   width: 100%;
   margin: 12px 0;
   font-size: 13px;
+  line-height: 1.5;
 }
-.ai-msg-text :deep(.md-table th),
-.ai-msg-text :deep(.md-table td) {
+.ai-msg-text :deep(table th),
+.ai-msg-text :deep(table td) {
   border: 1px solid #dcdfe6;
-  padding: 6px 12px;
+  padding: 8px 12px;
   text-align: left;
-  line-height: 1.6;
 }
-.ai-msg-text :deep(.md-table thead tr) {
+.ai-msg-text :deep(table thead tr) {
   background-color: #f5f7fa;
   font-weight: 600;
-  color: #303133;
 }
-.ai-msg-text :deep(.md-table tbody tr:nth-child(even)) {
-  background-color: #fafafa;
+.ai-msg-text :deep(pre) {
+  background: #f8f9fb;
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin: 10px 0;
+}
+.ai-msg-text :deep(code) {
+  font-family: 'Fira Code', monospace;
+  background: #f0f2f5;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.ai-msg-text :deep(p) {
+  margin: 8px 0;
+  line-height: 1.7;
+}
+.ai-msg-text :deep(.md-math-block) {
+  margin: 16px 0;
+  overflow-x: auto;
+  text-align: center;
 }
 
 /* ===========================
