@@ -59,7 +59,7 @@
           <el-button type="primary" size="large" @click="handleAnalysis">
             开始 AI 解析
           </el-button>
-          <el-button size="large">手动填写</el-button>
+          <el-button size="large" @click="showManualDialog = true">手动填写</el-button>
         </div>
       </template>
 
@@ -81,8 +81,7 @@
       </div>
     </el-card>
 
-    <div v-else class="profile-content">
-      <!-- AI来源标注 -->
+    <div v-else class="profile-content">      <!-- AI来源标注 -->
       <div class="source-banner" :class="isFallbackMode ? 'fallback-banner' : 'ai-banner'">
         <span v-if="!isFallbackMode">
           <el-icon><Cpu /></el-icon>
@@ -151,6 +150,35 @@
         </el-col>
       </el-row>
     </div>
+
+    <!-- 手动填写弹窗 -->
+    <el-dialog
+      v-model="showManualDialog"
+      title="手动填写简历内容"
+      width="640px"
+      :close-on-click-modal="false"
+    >
+      <p class="manual-tip">将你的简历文字内容粘贴到下方，AI 将自动解析生成能力画像。</p>
+      <el-input
+        v-model="manualText"
+        type="textarea"
+        :rows="12"
+        placeholder="粘贴简历文字内容，例如：&#10;姓名：张三&#10;专业：计算机科学与技术&#10;技能：Java、Spring Boot、MySQL...&#10;实习经历：xxx公司后端开发实习生..."
+        maxlength="4000"
+        show-word-limit
+      />
+      <template #footer>
+        <el-button @click="showManualDialog = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="manualAnalyzing"
+          :disabled="!manualText.trim()"
+          @click="handleManualAnalysis"
+        >
+          {{ manualAnalyzing ? 'AI 解析中...' : '提交并解析' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -203,6 +231,9 @@ const agentStep = ref(0)       // 0=文件读取 1=Dify调用中 2=解析维度 
 const selectedFile = ref<UploadRawFile | null>(null)
 const isDragging = ref(false)
 const isFallbackMode = ref(false)
+const showManualDialog = ref(false)
+const manualText = ref('')
+const manualAnalyzing = ref(false)
 
 const colors = [
   { color: '#f56c6c', percentage: 60 },
@@ -268,6 +299,40 @@ const handleExit = () => {
   })
 }
 
+const handleManualAnalysis = async () => {
+  if (!manualText.value.trim()) return
+  manualAnalyzing.value = true
+  try {
+    const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000'
+    const response = await fetch(`${baseURL}/api/analyze-text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resumeText: manualText.value }),
+    })
+    const result = await response.json()
+    if (result.code === 0) {
+      isFallbackMode.value = result.source === 'fallback'
+      userStore.setStudentProfile(result.data)
+      if (result.resumeText) userStore.setResumeText(result.resumeText)
+      showManualDialog.value = false
+      manualText.value = ''
+      ElNotification({
+        title: result.source === 'fallback' ? '解析完成（本地模式）' : 'AI 解析完成',
+        message: `已识别 ${result.data?.skills?.professionalSkills?.length || 0} 项技能`,
+        type: result.source === 'fallback' ? 'warning' : 'success',
+        duration: 4000,
+        position: 'top-right',
+      })
+    } else {
+      throw new Error(result.message)
+    }
+  } catch (error: any) {
+    ElMessage.error('解析失败：' + (error.message || '请稍后重试'))
+  } finally {
+    manualAnalyzing.value = false
+  }
+}
+
 const handleAnalysis = async () => {
   if (!selectedFile.value) {
     ElMessage.warning('请先上传简历文件');
@@ -298,6 +363,9 @@ const handleAnalysis = async () => {
 
       isFallbackMode.value = result.source === 'fallback'
       userStore.setStudentProfile(result.data);
+      if (result.resumeText) {
+        userStore.setResumeText(result.resumeText)
+      }
 
       if (result.source === 'fallback') {
         ElNotification({
@@ -607,5 +675,11 @@ const formatSkillLabel = (key: string) => {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.manual-tip {
+  font-size: 13px;
+  color: #909399;
+  margin: 0 0 12px;
 }
 </style>

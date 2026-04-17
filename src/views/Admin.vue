@@ -59,7 +59,7 @@
         <el-row :gutter="20" class="chart-row">
           <el-col :span="12">
             <el-card shadow="hover" class="chart-card">
-              <template #header><span>🎓 学生能力维度平均分布（模拟样本）</span></template>
+              <template #header><span>🎓 学生能力维度平均分布</span></template>
               <RadarChart :data="studentRadarData" />
             </el-card>
           </el-col>
@@ -72,7 +72,7 @@
         </el-row>
 
         <el-card shadow="hover" style="margin-top:20px">
-          <template #header><span>👥 最近注册用户（模拟数据）</span></template>
+          <template #header><span>👥 最近注册用户</span></template>
           <el-table :data="recentUsers" stripe size="small">
             <el-table-column prop="id" label="ID" width="60" />
             <el-table-column prop="name" label="姓名" width="80" />

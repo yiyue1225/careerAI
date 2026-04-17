@@ -27,6 +27,17 @@ export const DIM_LABELS: Record<DimKey, string> = {
   internship:   '实习经验',
 }
 
+/** 各维度惩罚权重（证书不是硬性要求，扣分占比低）*/
+export const DIM_WEIGHTS: Record<DimKey, number> = {
+  professional:  1.0,
+  certificate:   0.4,
+  innovation:    1.0,
+  learning:      1.0,
+  stress:        1.0,
+  communication: 1.0,
+  internship:    1.0,
+}
+
 /**
  * 计算匹配度（0-100）
  * @param studentDims 学生各维度得分
@@ -36,21 +47,22 @@ export function calcMatchScore(
   studentDims: Record<string, number>,
   jobDims: Record<string, number>
 ): number {
-  let totalPenalty = 0
-  let count = 0
+  let weightedPenalty = 0
+  let totalWeight = 0
 
   DIMS.forEach(d => {
     const s = studentDims[d] || 0
     const j = jobDims[d] || 0
     if (j > 5) { // 忽略要求极低（≤5）的维度，避免分母趋零
       const deficit = Math.max(0, j - s)
-      totalPenalty += deficit / j  // 相对缺口 0~1
-      count++
+      const w = DIM_WEIGHTS[d]
+      weightedPenalty += (deficit / j) * w  // 相对缺口 × 权重
+      totalWeight += w
     }
   })
 
-  if (count === 0) return 60 // 岗位无有效维度数据，给中间分
-  const avgPenalty = totalPenalty / count
+  if (totalWeight === 0) return 60 // 岗位无有效维度数据，给中间分
+  const avgPenalty = weightedPenalty / totalWeight
   return Math.round(Math.max(0, Math.min(100, (1 - avgPenalty) * 100)))
 }
 

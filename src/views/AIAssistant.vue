@@ -97,6 +97,41 @@
 
     <!-- 输入区 -->
     <div class="input-zone">
+      <!-- 全局快捷提问 -->
+      <div class="quick-bar">
+        <button
+          v-for="q in globalQuickQuestions"
+          :key="q.id"
+          class="quick-chip"
+          @click="handleQuickQuestion(q)"
+        >
+          <span class="quick-chip-icon">{{ q.icon }}</span>
+          <span>{{ q.label }}</span>
+        </button>
+      </div>
+
+      <!-- 填空弹窗 -->
+      <el-dialog
+        v-model="fillDialogVisible"
+        :title="fillDialogQuestion?.label"
+        width="420px"
+        :close-on-click-modal="true"
+        append-to-body
+      >
+        <p class="fill-tip">{{ fillDialogQuestion?.tip }}</p>
+        <el-input
+          v-model="fillDialogInput"
+          :placeholder="fillDialogQuestion?.placeholder"
+          size="large"
+          autofocus
+          @keyup.enter="submitFillDialog"
+        />
+        <template #footer>
+          <el-button @click="fillDialogVisible = false">取消</el-button>
+          <el-button type="primary" :disabled="!fillDialogInput.trim()" @click="submitFillDialog">发送</el-button>
+        </template>
+      </el-dialog>
+
       <!-- 附件预览 -->
       <div v-if="attachedFile" class="attachment-preview">
         <div class="attach-chip">
@@ -190,6 +225,95 @@ const quickQuestions = [
   { icon: '🏆', text: '哪些证书对找互联网工作最有用？' },
 ]
 
+// 全局快捷提问（任意轮次均可见）
+interface QuickQuestion {
+  id: string
+  icon: string
+  label: string
+  // type: 'direct' 直接发送；'fill' 需要填空
+  type: 'direct' | 'fill'
+  text?: string                // type=direct 时使用
+  template?: string            // type=fill 时使用，{input} 为填空位
+  tip?: string
+  placeholder?: string
+}
+
+const globalQuickQuestions: QuickQuestion[] = [
+  {
+    id: 'recommend',
+    icon: '🎯',
+    label: '推荐岗位',
+    type: 'direct',
+    text: '根据我的能力画像推荐几个合适的岗位，并说明推荐理由',
+  },
+  {
+    id: 'career-path',
+    icon: '🚀',
+    label: '职业路径',
+    type: 'fill',
+    template: '{input} 的职业发展路径是什么？有哪些晋升方向和转型方向？',
+    tip: '输入你想了解的职位名称',
+    placeholder: '例如：Java 后端工程师、产品经理…',
+  },
+  {
+    id: 'skill-gap',
+    icon: '📊',
+    label: '技能差距',
+    type: 'fill',
+    template: '我想应聘 {input}，根据我的能力画像，我还有哪些技能差距？应该如何弥补？',
+    tip: '输入目标岗位名称',
+    placeholder: '例如：算法工程师、数据分析师…',
+  },
+  {
+    id: 'resume',
+    icon: '📄',
+    label: '简历分析',
+    type: 'direct',
+    text: '请详细分析我的简历，指出优势、不足，并给出改进建议',
+  },
+  {
+    id: 'compare',
+    icon: '⚖️',
+    label: '岗位对比',
+    type: 'fill',
+    template: '请对比 {input} 这两个方向，哪个更适合我？分析优劣势',
+    tip: '输入两个想对比的方向，用"和"或"vs"分隔',
+    placeholder: '例如：前端开发 和 产品经理',
+  },
+  {
+    id: 'interview',
+    icon: '💡',
+    label: '面试准备',
+    type: 'fill',
+    template: '我要面试 {input} 岗位，请帮我梳理常见面试题和准备重点',
+    tip: '输入目标岗位',
+    placeholder: '例如：后端开发、运营经理…',
+  },
+]
+
+const fillDialogVisible = ref(false)
+const fillDialogQuestion = ref<QuickQuestion | null>(null)
+const fillDialogInput = ref('')
+
+const handleQuickQuestion = (q: QuickQuestion) => {
+  if (q.type === 'direct') {
+    inputText.value = q.text!
+    sendMessage()
+  } else {
+    fillDialogQuestion.value = q
+    fillDialogInput.value = ''
+    fillDialogVisible.value = true
+  }
+}
+
+const submitFillDialog = () => {
+  if (!fillDialogInput.value.trim() || !fillDialogQuestion.value) return
+  const text = fillDialogQuestion.value.template!.replace('{input}', fillDialogInput.value.trim())
+  fillDialogVisible.value = false
+  inputText.value = text
+  sendMessage()
+}
+
 // ==========================================
 // Markdown 渲染
 // ==========================================
@@ -235,6 +359,25 @@ const renderMarkdown = (text: string): string => {
     return `<ul class="md-ul">${items}</ul>`
   })
 
+  // Markdown 表格（| col | col | 格式）
+  html = html.replace(/((?:^\|.+\|\n?)+)/gm, (block) => {
+    const rows = block.trim().split('\n').filter(r => r.trim())
+    if (rows.length < 2) return block
+    const isSep = (r: string) => /^\|[\s|:-]+\|$/.test(r.trim())
+    // 找分隔行索引
+    const sepIdx = rows.findIndex(isSep)
+    if (sepIdx === -1) return block
+    const headerRow = rows[0]
+    const dataRows = rows.slice(sepIdx + 1)
+    const parseCells = (row: string) =>
+      row.replace(/^\||\|$/g, '').split('|').map(c => c.trim())
+    const headers = parseCells(headerRow).map(c => `<th>${c}</th>`).join('')
+    const bodyHtml = dataRows.map(row =>
+      `<tr>${parseCells(row).map(c => `<td>${c}</td>`).join('')}</tr>`
+    ).join('')
+    return `<table class="md-table"><thead><tr>${headers}</tr></thead><tbody>${bodyHtml}</tbody></table>`
+  })
+
   // 分割线
   html = html.replace(/^---$/gm, '<hr class="md-hr">')
 
@@ -251,6 +394,12 @@ const scrollToBottom = (smooth = true) => {
   nextTick(() => {
     bottomAnchor.value?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' })
   })
+}
+
+const isNearBottom = () => {
+  const el = messagesContainer.value
+  if (!el) return true
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 120
 }
 
 const addMessage = (role: 'user' | 'assistant', content: string) => {
@@ -315,6 +464,9 @@ const sendMessage = async () => {
           skills: analyzeData.data.skills,
           source: analyzeData.data.source || 'ai',
         })
+        if (analyzeData.resumeText) {
+          userStore.setResumeText(analyzeData.resumeText)
+        }
 
         ElMessage.success('✓ 简历解析完成，已保存到「我的能力画像」')
 
@@ -342,47 +494,89 @@ const sendMessage = async () => {
   loading.value = true
   thinkingSeconds.value = 0
   thinkingTimer = setInterval(() => { thinkingSeconds.value++ }, 1000)
-  scrollToBottom()
+
+  // 先占位一条空的 AI 消息，后续逐字填充
+  const aiMsg: Message = {
+    id: ++msgIdCounter,
+    role: 'assistant',
+    content: '',
+    time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+  }
 
   try {
-    // 纯文字对话
     const profile = userStore.studentProfile
     const inputs: any = {}
 
-    // 强化提示词：要求 AI 不要输出引用、工具调用过程等
-    let finalMessage = text;
+    let finalMessage = text
     if (!conversationId.value) {
       finalMessage += "\n(请直接给出你的职业建议或回答，不要输出任何关于'调用本地知识库'、'使用工具'、'引用'等元数据信息或调试信息。)"
     }
 
-    // 如果有简历，传给 Dify 的 user_resume 变量
-    if (profile) {
-      // 构造一段简洁的简历摘要传给 user_resume 变量
-      const resumeInfo = `姓名: ${profile.name || '未知'}, 专业: ${profile.major || '未知'}, 年级: ${profile.grade || '未知'}。
+    if (userStore.resumeText) {
+      inputs.user_resume = userStore.resumeText.substring(0, 3000)
+    } else if (profile) {
+      inputs.user_resume = `姓名: ${profile.name || '未知'}, 专业: ${profile.major || '未知'}, 年级: ${profile.grade || '未知'}。
 技能: ${profile.skills?.professionalSkills?.join(', ') || '未提取'}。
 能力维度: 专业${profile.dimensions?.professional}, 证书${profile.dimensions?.certificate}, 创新${profile.dimensions?.innovation}, 学习${profile.dimensions?.learning}, 抗压${profile.dimensions?.stress}, 沟通${profile.dimensions?.communication}, 实习${profile.dimensions?.internship}。`
-      inputs.user_resume = resumeInfo
     }
 
     const res = await fetch(`${baseURL}/api/chat`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: text,
+        message: finalMessage,
         conversationId: conversationId.value || undefined,
-        inputs: inputs
+        inputs,
       }),
     })
 
-    const data = await res.json()
-    if (data.code === 0) {
-      conversationId.value = data.conversationId || ''
-      addMessage('assistant', data.answer)
-    } else {
-      throw new Error(data.message || '请求失败')
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}))
+      throw new Error(errorData.message || `请求失败 (${res.status})`)
     }
+    if (!res.body) throw new Error('响应正文为空')
+
+    // 停止计时，切换到打字状态
+    if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null }
+    loading.value = false
+    messages.value.push(aiMsg)
+    const msgIndex = messages.value.length - 1
+    scrollToBottom()
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const lines = buf.split('\n')
+      buf = lines.pop() ?? ''
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue
+        try {
+          const parsed = JSON.parse(line.slice(6))
+          if (parsed.type === 'chunk' && parsed.answer) {
+            messages.value[msgIndex].content += parsed.answer
+            if (isNearBottom()) scrollToBottom(false)
+          }
+          if (parsed.type === 'done' && parsed.conversationId) {
+            conversationId.value = parsed.conversationId
+          }
+          if (parsed.type === 'error') {
+            if (!messages.value[msgIndex].content) messages.value[msgIndex].content = '抱歉，AI 响应异常，请重试。'
+          }
+        } catch {}
+      }
+    }
+
+    if (!messages.value[msgIndex].content) messages.value[msgIndex].content = '抱歉，我没有生成回复，请重试。'
+
   } catch (err: any) {
-    addMessage('assistant', '抱歉，我现在无法响应，请检查网络连接或稍后重试。')
+    if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null }
+    loading.value = false
+    addMessage('assistant', `抱歉，响应出错了：${err.message || '请检查网络连接或稍后重试'}`)
   } finally {
     if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = null }
     loading.value = false
@@ -653,15 +847,71 @@ onMounted(() => {
 .ai-msg-text :deep(li) { margin: 4px 0; line-height: 1.7; }
 .ai-msg-text :deep(.md-hr) { border: none; border-top: 1px solid #e8e8e8; margin: 14px 0; }
 .ai-msg-text :deep(strong) { font-weight: 600; color: #111; }
+.ai-msg-text :deep(.md-table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.ai-msg-text :deep(.md-table th),
+.ai-msg-text :deep(.md-table td) {
+  border: 1px solid #dcdfe6;
+  padding: 6px 12px;
+  text-align: left;
+  line-height: 1.6;
+}
+.ai-msg-text :deep(.md-table thead tr) {
+  background-color: #f5f7fa;
+  font-weight: 600;
+  color: #303133;
+}
+.ai-msg-text :deep(.md-table tbody tr:nth-child(even)) {
+  background-color: #fafafa;
+}
 
 /* ===========================
    输入区
 =========================== */
 .input-zone {
   flex-shrink: 0;
-  padding: 16px 24px 20px;
+  padding: 10px 24px 20px;
   background: #fff;
   border-top: 1px solid #f0f0f0;
+}
+
+/* 全局快捷提问 */
+.quick-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: 860px;
+  margin: 0 auto 10px;
+}
+.quick-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  background: #fafafa;
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.quick-chip:hover {
+  border-color: #6366f1;
+  background: #f5f4ff;
+  color: #6366f1;
+}
+.quick-chip-icon { font-size: 14px; }
+
+.fill-tip {
+  font-size: 13px;
+  color: #909399;
+  margin: 0 0 12px;
 }
 .input-wrapper {
   display: flex; align-items: flex-end; gap: 10px;

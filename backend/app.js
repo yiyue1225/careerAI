@@ -81,10 +81,11 @@ app.get('/api/positions', async (req, res) => {
         const countSql = `SELECT COUNT(*) as total FROM job_standard_profile${whereClause}`;
         const [[{ total }]] = await pool.query(countSql, queryParams);
 
-        const dataSql = `SELECT id, job_name as name, company_name as company, city as location, 
-                         salary, industry, requirements, dimensions 
-                         FROM job_standard_profile${whereClause} 
-                         ORDER BY id ASC LIMIT ? OFFSET ?`;
+        const dataSql = `SELECT id, job_name as name, company_name as company, city as location,
+                         salary, industry, requirements, dimensions
+                         FROM job_standard_profile${whereClause}
+                         ORDER BY (CASE WHEN job_name LIKE '%科研人员%' THEN 1 ELSE 0 END) ASC, id ASC
+                         LIMIT ? OFFSET ?`;
         
         const [rows] = await pool.query(dataSql, [...queryParams, parseInt(size), offset]);
 
@@ -410,7 +411,7 @@ app.post('/api/analyze', upload.single('resume'), async (req, res) => {
                 if (jsonMatch) {
                     const analyzedData = JSON.parse(jsonMatch[0]);
                     if (analyzedData && analyzedData.dimensions) {
-                        return res.json({ code: 0, data: analyzedData, source: 'ai' });
+                        return res.json({ code: 0, data: analyzedData, source: 'ai', resumeText: resumeText.substring(0, 8000) });
                     }
                 }
                 console.warn('Dify 返回内容无法解析为目标JSON，降级处理。原始内容：', fullAnswer.substring(0, 500));
@@ -421,11 +422,86 @@ app.post('/api/analyze', upload.single('resume'), async (req, res) => {
 
         // 降级：用规则从简历文本提取基础信息
         const mockData = buildMockProfile(resumeText);
-        return res.json({ code: 0, data: mockData, source: 'fallback' });
+        return res.json({ code: 0, data: mockData, source: 'fallback', resumeText: resumeText.substring(0, 8000) });
 
     } catch (error) {
         console.error('Analyze Error:', error.message);
         res.status(500).json({ code: 500, message: '简历解析失败：' + error.message });
+    }
+});
+
+// 手动填写简历文本解析接口
+app.post('/api/analyze-text', async (req, res) => {
+    try {
+        const { resumeText } = req.body;
+        if (!resumeText || !resumeText.trim()) {
+            return res.status(400).json({ code: 400, message: '简历内容不能为空' });
+        }
+
+        const difyKey = process.env.DIFY_API_KEY_RESUME_ANALYSIS;
+        const difyUrl = process.env.DIFY_API_URL;
+
+        if (difyKey && difyUrl) {
+            try {
+                const chatPayload = {
+                    inputs: { resume_text: resumeText.substring(0, 4000) },
+                    query: '请分析简历并严格按JSON格式返回结果',
+                    response_mode: 'streaming',
+                    user: 'resume-user-' + Date.now(),
+                    conversation_id: '',
+                };
+
+                const difyRes = await axios({
+                    method: 'post',
+                    url: `${difyUrl}/chat-messages`,
+                    data: chatPayload,
+                    headers: {
+                        Authorization: `Bearer ${difyKey}`,
+                        'Content-Type': 'application/json',
+                    },
+                    timeout: 90000,
+                    responseType: 'stream',
+                });
+
+                let fullAnswer = '';
+                await new Promise((resolve, reject) => {
+                    difyRes.data.on('data', (chunk) => {
+                        const lines = chunk.toString().split('\n');
+                        for (const line of lines) {
+                            if (!line.startsWith('data: ')) continue;
+                            const jsonStr = line.slice(6).trim();
+                            if (!jsonStr || jsonStr === '[DONE]') continue;
+                            try {
+                                const parsed = JSON.parse(jsonStr);
+                                if ((parsed.event === 'agent_message' || parsed.event === 'message') && parsed.answer) {
+                                    fullAnswer += parsed.answer;
+                                }
+                            } catch {}
+                        }
+                    });
+                    difyRes.data.on('end', resolve);
+                    difyRes.data.on('error', reject);
+                });
+
+                const jsonMatch = fullAnswer.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    const analyzedData = JSON.parse(jsonMatch[0]);
+                    if (analyzedData && analyzedData.dimensions) {
+                        return res.json({ code: 0, data: analyzedData, source: 'ai', resumeText: resumeText.substring(0, 8000) });
+                    }
+                }
+                console.warn('Dify 返回内容无法解析为目标JSON，降级处理。');
+            } catch (difyErr) {
+                console.warn('Dify 调用失败：', difyErr.response?.data || difyErr.message);
+            }
+        }
+
+        const mockData = buildMockProfile(resumeText);
+        return res.json({ code: 0, data: mockData, source: 'fallback', resumeText: resumeText.substring(0, 8000) });
+
+    } catch (error) {
+        console.error('Analyze-text Error:', error.message);
+        res.status(500).json({ code: 500, message: '解析失败：' + error.message });
     }
 });
 
@@ -451,7 +527,7 @@ app.get('/api/skill-stats', async (req, res) => {
     }
 });
 
-// 6. AI 聊天助手接口（代理 Dify Chatbot，支持可选文件上传）
+// 6. AI 聊天助手接口（流式透传，前端逐字渲染）
 app.post('/api/chat', upload.single('file'), async (req, res) => {
     try {
         const message = req.body.message;
@@ -462,14 +538,14 @@ app.post('/api/chat', upload.single('file'), async (req, res) => {
         const difyUrl = process.env.DIFY_API_URL;
 
         const payload = {
-            inputs: req.body.inputs || {},
+            inputs: req.body.inputs ? (typeof req.body.inputs === 'string' ? JSON.parse(req.body.inputs) : req.body.inputs) : {},
             query: message,
-            response_mode: 'blocking',
+            response_mode: 'streaming',
             user: 'career-ai-user-' + Date.now(),
         };
         if (conversationId) payload.conversation_id = conversationId;
 
-        // 如果携带了文件，先上传到 Dify，再把 file_id 附加到消息
+        // 如果携带了文件，先上传到 Dify
         if (req.file) {
             try {
                 const FormDataLib = require('form-data');
@@ -479,74 +555,68 @@ app.post('/api/chat', upload.single('file'), async (req, res) => {
                     contentType: req.file.mimetype || 'application/octet-stream',
                 });
                 fileForm.append('user', payload.user);
-
                 const uploadRes = await axios.post(`${difyUrl}/files/upload`, fileForm, {
-                    headers: {
-                        ...fileForm.getHeaders(),
-                        Authorization: `Bearer ${difyKey}`,
-                    },
+                    headers: { ...fileForm.getHeaders(), Authorization: `Bearer ${difyKey}` },
                     timeout: 30000,
                 });
-
                 const fileId = uploadRes.data?.id;
                 if (fileId) {
-                    payload.files = [{
-                        type: 'document',
-                        transfer_method: 'local_file',
-                        upload_file_id: fileId,
-                    }];
-                    console.log('Chat 文件上传成功:', fileId, req.file.originalname);
+                    payload.files = [{ type: 'document', transfer_method: 'local_file', upload_file_id: fileId }];
                 }
             } catch (uploadErr) {
-                // 文件上传失败不中断，只用文字继续
                 console.warn('Chat 文件上传失败，仅用文字:', uploadErr.message);
                 payload.query = `[附件：${req.file.originalname}]\n\n${message}`;
             }
         }
-
-        // Agent 类型必须用 streaming，不支持 blocking
-        payload.response_mode = 'streaming';
 
         const difyRes = await axios({
             method: 'post',
             url: `${difyUrl}/chat-messages`,
             data: payload,
             headers: { Authorization: `Bearer ${difyKey}`, 'Content-Type': 'application/json' },
-            timeout: 60000,
+            timeout: 90000,
             responseType: 'stream',
         });
 
-        // 收集 SSE 流，拼接 answer
-        let fullAnswer = '';
+        // 设置 SSE 响应头，直接透传给前端
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders();
+
         let returnedConvId = '';
-        await new Promise((resolve, reject) => {
-            difyRes.data.on('data', (chunk) => {
-                const lines = chunk.toString().split('\n');
-                for (const line of lines) {
-                    if (!line.startsWith('data: ')) continue;
-                    const jsonStr = line.slice(6).trim();
-                    if (!jsonStr || jsonStr === '[DONE]') continue;
-                    try {
-                        const parsed = JSON.parse(jsonStr);
-                        if ((parsed.event === 'agent_message' || parsed.event === 'message') && parsed.answer) {
-                            fullAnswer += parsed.answer;
-                        }
-                        if (parsed.conversation_id) returnedConvId = parsed.conversation_id;
-                    } catch {}
-                }
-            });
-            difyRes.data.on('end', resolve);
-            difyRes.data.on('error', reject);
+        difyRes.data.on('data', (chunk) => {
+            const lines = chunk.toString().split('\n');
+            for (const line of lines) {
+                if (!line.startsWith('data: ')) continue;
+                const jsonStr = line.slice(6).trim();
+                if (!jsonStr || jsonStr === '[DONE]') continue;
+                try {
+                    const parsed = JSON.parse(jsonStr);
+                    if (parsed.conversation_id) returnedConvId = parsed.conversation_id;
+                    if ((parsed.event === 'agent_message' || parsed.event === 'message') && parsed.answer) {
+                        res.write(`data: ${JSON.stringify({ type: 'chunk', answer: parsed.answer, conversationId: returnedConvId })}\n\n`);
+                    }
+                    if (parsed.event === 'message_end') {
+                        res.write(`data: ${JSON.stringify({ type: 'done', conversationId: returnedConvId })}\n\n`);
+                    }
+                } catch {}
+            }
+        });
+        difyRes.data.on('end', () => {
+            res.write(`data: ${JSON.stringify({ type: 'done', conversationId: returnedConvId })}\n\n`);
+            res.end();
+        });
+        difyRes.data.on('error', () => {
+            res.write(`data: ${JSON.stringify({ type: 'error', message: 'AI 响应异常' })}\n\n`);
+            res.end();
         });
 
-        res.json({
-            code: 0,
-            answer: fullAnswer || '抱歉，我没有生成回复，请重试。',
-            conversationId: returnedConvId,
-        });
     } catch (error) {
         console.error('Chat API Error:', error.response?.data || error.message);
-        res.status(500).json({ code: 500, message: 'AI 助手暂时不可用，请稍后再试' });
+        if (!res.headersSent) {
+            res.status(500).json({ code: 500, message: 'AI 助手暂时不可用，请稍后再试' });
+        }
     }
 });
 
