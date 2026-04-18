@@ -552,11 +552,13 @@ const sendMessage = async () => {
               messages.value[msgIndex].content = displayedText
             }
           }
-          if (isNearBottom()) scrollToBottom(false)
+          // 移除打字过程中的自动滚动，让用户可以自由滚动
         } else if (doneReading) {
-          // 读取结束且队列清空
+          // 读取结束且队列清空，只在此时滚动一次
           clearInterval(typingTimer)
           typingTimer = null
+          // 如果用户在底部，则滚动到最新消息
+          if (isNearBottom()) scrollToBottom(false)
         }
       }, 25) // 25ms 刷新率，体感最流畅
     }
@@ -649,7 +651,7 @@ onMounted(() => {
 .ai-page {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 60px);
+  height: 100%;
   background: #ffffff;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }

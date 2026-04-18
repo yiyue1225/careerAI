@@ -55,8 +55,8 @@
       </div>
     </el-aside>
     <el-container>
-      <el-header class="header">基于AI的大学生职业规划智能体</el-header>
-      <el-main class="main">
+      <el-header v-if="$route.path !== '/ai-assistant'" class="header">基于AI的大学生职业规划智能体</el-header>
+      <el-main class="main" :class="{ 'ai-assistant-main': $route.path === '/ai-assistant' }">
         <router-view />
       </el-main>
     </el-container>
@@ -136,46 +136,8 @@ const logout = () => {
   background-color: #f0f2f5;
   padding: 20px;
 }
-</style>
-
-<style scoped>
-.layout-container {
-  height: 100vh;
-}
-.aside {
-  background-color: #304156;
-  color: white;
-}
-.logo {
-  height: 60px;
-  line-height: 60px;
-  text-align: center;
-  font-size: 18px;
-  font-weight: bold;
-  border-bottom: 1px solid #1f2d3d;
-}
-.el-menu {
-  background-color: transparent;
-  border-right: none;
-}
-.el-menu-item {
-  color: #bfcbd9;
-}
-.el-menu-item.is-active {
-  color: #409eff;
-  background-color: #263445;
-}
-.header {
-  background-color: #fff;
-  border-bottom: 1px solid #e6e9f0;
-  display: flex;
-  align-items: center;
-  font-size: 20px;
-  font-weight: 500;
-  color: #303133;
-}
-.main {
-  background-color: #f0f2f5;
-  padding: 20px;
+.ai-assistant-main {
+  background-color: #ffffff;
+  padding: 0;
 }
 </style>
