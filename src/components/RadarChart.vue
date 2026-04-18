@@ -121,11 +121,19 @@ const handleResize = () => {
   chart?.resize()
 }
 
+let resizeObserver: ResizeObserver | null = null
+
 onMounted(() => {
   if (chartRef.value) {
     chart = echarts.init(chartRef.value)
     updateChart()
     window.addEventListener('resize', handleResize)
+
+    // 监听容器大小变化（解决 tab 切换时高度为 0 的问题）
+    resizeObserver = new ResizeObserver(() => {
+      chart?.resize()
+    })
+    resizeObserver.observe(chartRef.value)
   }
 })
 
@@ -136,6 +144,10 @@ watch(() => props.data, () => {
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+    resizeObserver = null
+  }
   chart?.dispose()
   chart = null // 显式释放引用
 })

@@ -13,7 +13,7 @@
               </div>
             </div>
           </template>
-          <div style="height:320px">
+          <div style="height:480px">
             <RadarChart :data="radarData" />
           </div>
         </el-card>
@@ -40,7 +40,7 @@
           </div>
         </el-card>
 
-        <el-card shadow="hover" style="margin-top:14px">
+        <el-card shadow="hover" style="margin-top:12px">
           <template #header>岗位信息</template>
           <div class="job-info-list">
             <div class="job-info-item"><label>公司</label><span>{{ position.company }}</span></div>
@@ -55,7 +55,7 @@
     </el-row>
 
     <!-- 维度详情表 -->
-    <el-card shadow="hover" style="margin-top:20px">
+    <el-card shadow="hover" style="margin-top:12px">
       <template #header>
         <div class="card-header-flex">
           <span>维度得分详情</span>
@@ -95,7 +95,7 @@
     </el-card>
 
     <!-- 缺失技能 -->
-    <el-card shadow="hover" style="margin-top:20px" v-if="missingSkills.length">
+    <el-card shadow="hover" style="margin-top:12px" v-if="missingSkills.length">
       <template #header>🔧 待补充技能</template>
       <div style="display:flex;flex-wrap:wrap;gap:8px">
         <el-tag v-for="s in missingSkills" :key="s" type="danger" effect="plain">{{ s }}</el-tag>
@@ -103,7 +103,7 @@
     </el-card>
 
     <!-- 行动计划 -->
-    <el-card shadow="hover" style="margin-top:20px">
+    <el-card shadow="hover" style="margin-top:12px">
       <template #header>📅 个性化行动计划</template>
       <el-timeline>
         <el-timeline-item
@@ -123,7 +123,7 @@
 
     <!-- 导出 PDF -->
     <div style="text-align:center;margin-top:24px">
-      <el-button type="primary" :icon="Download" @click="exportPDF" round>导出本岗位报告 PDF</el-button>
+      <el-button type="primary" :icon="Printer" @click="printReport" round>下载报告 PDF</el-button>
       <el-button :icon="Promotion" @click="$router.push('/volunteer')" round>加入求职投递清单</el-button>
     </div>
   </div>
@@ -132,8 +132,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { Download, Promotion } from '@element-plus/icons-vue'
-import html2pdf from 'html2pdf.js'
+import { Printer, Promotion } from '@element-plus/icons-vue'
+import html2canvas from 'html2canvas'
+import jsPDF from 'jspdf'
 import RadarChart from '@/components/RadarChart.vue'
 import { calcMatchScore, getMatchTagType, DIMS, DIM_LABELS } from '@/utils/match'
 
@@ -253,16 +254,177 @@ const actionPlans = computed(() => {
   ].map(p => ({ ...p, items: p.items.length ? p.items : ['制定具体学习计划，持续跟进'] }))
 })
 
-const exportPDF = () => {
-  const el = document.querySelector('.pos-analysis') as HTMLElement
-  if (!el) return
-  html2pdf().set({
-    margin: [0.4, 0.4, 0.4, 0.4],
-    filename: `匹配报告_${props.position?.name || ''}.pdf`,
-    image: { type: 'jpeg', quality: 0.95 },
-    html2canvas: { scale: 2, useCORS: true },
-    jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
-  }).from(el).save()
+const printReport = async () => {
+  // 创建临时容器
+  const container = document.createElement('div')
+  container.style.position = 'absolute'
+  container.style.left = '-9999px'
+  container.style.width = '1000px'
+  container.style.backgroundColor = '#fff'
+  container.style.padding = '40px'
+  container.style.fontFamily = 'Arial, sans-serif'
+
+  container.innerHTML = `
+    <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #409eff; padding-bottom: 20px;">
+      <h1 style="font-size: 28px; color: #303133; margin: 0 0 10px 0;">职业匹配分析报告</h1>
+      <p style="color: #909399; font-size: 14px; margin: 0 0 5px 0;">${props.position?.name} @ ${props.position?.company}</p>
+      <p style="color: #909399; font-size: 12px; margin: 0;">生成时间：${new Date().toLocaleDateString('zh-CN')}</p>
+    </div>
+
+    <div style="margin-bottom: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+      <div style="padding: 15px; background: #f5f7fa; border-radius: 4px;">
+        <h3 style="font-size: 14px; color: #303133; margin: 0 0 12px 0; font-weight: 600;">个人信息</h3>
+        <table style="width: 100%; font-size: 13px; line-height: 1.8;">
+          <tr>
+            <td style="color: #909399; width: 40%;">姓名</td>
+            <td style="color: #303133; font-weight: 500;">${props.studentProfile?.name || '-'}</td>
+          </tr>
+          <tr>
+            <td style="color: #909399;">专业</td>
+            <td style="color: #303133; font-weight: 500;">${props.studentProfile?.major || '-'}</td>
+          </tr>
+          <tr>
+            <td style="color: #909399;">年级</td>
+            <td style="color: #303133; font-weight: 500;">${props.studentProfile?.grade || '无'}</td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="padding: 15px; background: #f5f7fa; border-radius: 4px;">
+        <h3 style="font-size: 14px; color: #303133; margin: 0 0 12px 0; font-weight: 600;">目标岗位</h3>
+        <table style="width: 100%; font-size: 13px; line-height: 1.8;">
+          <tr>
+            <td style="color: #909399; width: 40%;">岗位</td>
+            <td style="color: #303133; font-weight: 500;">${props.position?.name || '-'}</td>
+          </tr>
+          <tr>
+            <td style="color: #909399;">公司</td>
+            <td style="color: #303133; font-weight: 500;">${props.position?.company || '-'}</td>
+          </tr>
+          <tr>
+            <td style="color: #909399;">行业</td>
+            <td style="color: #303133; font-weight: 500;">${props.position?.industry || '-'}</td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 30px;">
+      <h2 style="font-size: 18px; color: #303133; margin: 0 0 15px 0; padding-bottom: 8px; border-bottom: 1px solid #e4e7ed;">综合匹配度</h2>
+      <div style="text-align: center; margin: 20px 0;">
+        <div style="font-size: 48px; font-weight: bold; color: #409eff;">${matchScore.value}%</div>
+        <div style="font-size: 14px; color: #606266; margin-top: 8px;">${scoreDesc.value}</div>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 30px;">
+      <h2 style="font-size: 18px; color: #303133; margin: 0 0 15px 0; padding-bottom: 8px; border-bottom: 1px solid #e4e7ed;">岗位信息</h2>
+      <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+        <tr>
+          <td style="background: #f5f7fa; padding: 10px; font-weight: 600; border-bottom: 1px solid #e4e7ed; width: 25%;">公司</td>
+          <td style="padding: 10px; border-bottom: 1px solid #e4e7ed;">${props.position?.company || '-'}</td>
+        </tr>
+        <tr>
+          <td style="background: #f5f7fa; padding: 10px; font-weight: 600; border-bottom: 1px solid #e4e7ed;">城市</td>
+          <td style="padding: 10px; border-bottom: 1px solid #e4e7ed;">${props.position?.location || '-'}</td>
+        </tr>
+        <tr>
+          <td style="background: #f5f7fa; padding: 10px; font-weight: 600; border-bottom: 1px solid #e4e7ed;">薪资</td>
+          <td style="padding: 10px; border-bottom: 1px solid #e4e7ed;">${props.position?.salary || '-'}</td>
+        </tr>
+        <tr>
+          <td style="background: #f5f7fa; padding: 10px; font-weight: 600; border-bottom: 1px solid #e4e7ed;">匹配度</td>
+          <td style="padding: 10px; border-bottom: 1px solid #e4e7ed; color: #409eff; font-weight: bold;">${matchScore.value}%</td>
+        </tr>
+      </table>
+    </div>
+
+    <div style="margin-bottom: 30px;">
+      <h2 style="font-size: 18px; color: #303133; margin: 0 0 15px 0; padding-bottom: 8px; border-bottom: 1px solid #e4e7ed;">维度得分详情</h2>
+      <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+        <thead>
+          <tr>
+            <th style="background: #f5f7fa; padding: 10px; text-align: left; font-weight: 600; font-size: 13px; border-bottom: 2px solid #e4e7ed;">维度</th>
+            <th style="background: #f5f7fa; padding: 10px; text-align: left; font-weight: 600; font-size: 13px; border-bottom: 2px solid #e4e7ed;">我的得分</th>
+            <th style="background: #f5f7fa; padding: 10px; text-align: left; font-weight: 600; font-size: 13px; border-bottom: 2px solid #e4e7ed;">岗位要求</th>
+            <th style="background: #f5f7fa; padding: 10px; text-align: left; font-weight: 600; font-size: 13px; border-bottom: 2px solid #e4e7ed;">差距</th>
+            <th style="background: #f5f7fa; padding: 10px; text-align: left; font-weight: 600; font-size: 13px; border-bottom: 2px solid #e4e7ed;">建议</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${matchDetails.value.map(d => `
+            <tr>
+              <td style="padding: 10px; border-bottom: 1px solid #e4e7ed; font-size: 13px;">${d.dimension}</td>
+              <td style="padding: 10px; border-bottom: 1px solid #e4e7ed; font-size: 13px;">${d.student}</td>
+              <td style="padding: 10px; border-bottom: 1px solid #e4e7ed; font-size: 13px;">${d.position}</td>
+              <td style="padding: 10px; border-bottom: 1px solid #e4e7ed; font-size: 13px; color: ${d.deficit > 0 ? '#f56c6c' : '#67c23a'}; font-weight: bold;">${d.deficit > 0 ? `-${d.deficit}` : '✓'}</td>
+              <td style="padding: 10px; border-bottom: 1px solid #e4e7ed; font-size: 13px;">${d.suggestion}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+
+    ${missingSkills.value.length ? `
+      <div style="margin-bottom: 30px;">
+        <h2 style="font-size: 18px; color: #303133; margin: 0 0 15px 0; padding-bottom: 8px; border-bottom: 1px solid #e4e7ed;">待补充技能</h2>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0;">
+          ${missingSkills.value.map(s => `<span style="display: inline-block; padding: 4px 10px; background: #fef0f0; border-radius: 4px; font-size: 12px; color: #f56c6c;">${s}</span>`).join('')}
+        </div>
+      </div>
+    ` : ''}
+
+    <div style="margin-bottom: 30px;">
+      <h2 style="font-size: 18px; color: #303133; margin: 0 0 15px 0; padding-bottom: 8px; border-bottom: 1px solid #e4e7ed;">个性化行动计划</h2>
+      <div style="margin: 15px 0;">
+        ${actionPlans.value.map(plan => `
+          <div style="margin-bottom: 20px; padding-left: 20px; border-left: 3px solid #409eff;">
+            <div style="font-weight: 600; color: #303133; margin-bottom: 8px;">${plan.period} - ${plan.title}</div>
+            <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #606266; line-height: 1.8;">
+              ${plan.items.map(item => `<li>${item}</li>`).join('')}
+            </ul>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `
+
+  document.body.appendChild(container)
+
+  try {
+    const canvas = await html2canvas(container, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff'
+    })
+
+    const imgData = canvas.toDataURL('image/png')
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    })
+
+    const imgWidth = 210
+    const imgHeight = (canvas.height * imgWidth) / canvas.width
+    let heightLeft = imgHeight
+    let position = 0
+
+    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
+    heightLeft -= 297
+
+    while (heightLeft >= 0) {
+      position = heightLeft - imgHeight
+      pdf.addPage()
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
+      heightLeft -= 297
+    }
+
+    pdf.save(`匹配报告_${props.position?.name || '岗位'}.pdf`)
+  } finally {
+    document.body.removeChild(container)
+  }
 }
 </script>
 

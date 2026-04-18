@@ -277,7 +277,7 @@
           <!-- 对比雷达图 -->
           <div class="gap-section">
             <div class="gap-section-title">能力对比雷达图</div>
-            <div style="height:280px">
+            <div style="height:600px">
               <RadarChart :data="gapRadarData" />
             </div>
           </div>
@@ -641,13 +641,77 @@ const learningPaths = computed(() => {
 
 const exportReport = () => {
   if (!reportRef.value) return
-  html2pdf().set({
-    margin: [0.5, 0.5, 0.5, 0.5],
-    filename: '求职志愿报告.pdf',
-    image: { type: 'jpeg', quality: 0.95 },
-    html2canvas: { scale: 2, useCORS: true },
-    jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' }
-  }).from(reportRef.value).save()
+
+  // 保存原始样式
+  const originalStyles = new Map<HTMLElement, string>()
+
+  // 临时修改所有可能隐藏内容的元素
+  const modifyElement = (elem: HTMLElement) => {
+    originalStyles.set(elem, elem.getAttribute('style') || '')
+    elem.style.overflow = 'visible !important'
+    elem.style.maxHeight = 'none !important'
+    elem.style.maxWidth = 'none !important'
+    elem.style.display = 'block !important'
+    elem.style.visibility = 'visible !important'
+    elem.style.height = 'auto !important'
+  }
+
+  // 隐藏按钮
+  const buttons = document.querySelectorAll('.step-actions button')
+  buttons.forEach(btn => {
+    const elem = btn as HTMLElement
+    originalStyles.set(elem, elem.getAttribute('style') || '')
+    elem.style.display = 'none !important'
+  })
+
+  // 修改所有相关元素
+  reportRef.value.querySelectorAll('.el-table__wrapper, .el-scrollbar__wrap, .el-table__body-wrapper, [style*="height"], canvas').forEach(node => {
+    modifyElement(node as HTMLElement)
+  })
+
+  // 修改表格行高
+  reportRef.value.querySelectorAll('.el-table__row').forEach(node => {
+    const elem = node as HTMLElement
+    originalStyles.set(elem, elem.getAttribute('style') || '')
+    elem.style.height = 'auto !important'
+  })
+
+  // 触发ECharts resize
+  window.dispatchEvent(new Event('resize'))
+
+  setTimeout(() => {
+    html2pdf().set({
+      margin: [0.05, 0.05, 0.05, 0.05],
+      filename: '求职志愿报告.pdf',
+      image: { type: 'jpeg', quality: 0.99 },
+      html2canvas: {
+        scale: 3,
+        useCORS: true,
+        allowTaint: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowHeight: 5000,
+        windowWidth: 1800,
+        proxy: null,
+        ignoreElements: (element: Element) => {
+          return element.classList.contains('el-scrollbar__thumb') ||
+                 element.classList.contains('el-scrollbar__view') ||
+                 element.classList.contains('step-actions')
+        }
+      },
+      jsPDF: { unit: 'in', format: 'a4', orientation: 'landscape', compress: true },
+      pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+    }).from(reportRef.value).save().finally(() => {
+      // 恢复原始样式
+      originalStyles.forEach((style, elem) => {
+        if (style) {
+          elem.setAttribute('style', style)
+        } else {
+          elem.removeAttribute('style')
+        }
+      })
+    })
+  }, 3000)
 }
 </script>
 
@@ -718,7 +782,7 @@ const exportReport = () => {
 .report-header { text-align: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #e4e7ed; }
 .report-header h2 { margin: 0 0 8px; font-size: 26px; color: #303133; }
 .report-header p { color: #909399; font-size: 13px; margin: 0; }
-.report-summary { margin-bottom: 20px; }
+.report-summary { margin-bottom: 20px; page-break-inside: avoid; }
 .summary-card { text-align: center; padding: 24px; border-radius: 12px; }
 .rush-card { background: linear-gradient(135deg, #fff7e6, #ffecd2); border: 1px solid #e6a23c; }
 .stable-card { background: linear-gradient(135deg, #ecf5ff, #d9ecff); border: 1px solid #409eff; }
