@@ -5,7 +5,8 @@
       "Bash(npx tsc:*)",
       "Bash(npm run:*)",
       "Bash(node --check app.js)",
-      "Bash(npm list:*)"
+      "Bash(npm list:*)",
+      "Bash(gh pr:*)"
     ]
   }
 }
