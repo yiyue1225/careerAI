@@ -645,35 +645,12 @@ const exportReport = () => {
   // 保存原始样式
   const originalStyles = new Map<HTMLElement, string>()
 
-  // 临时修改所有可能隐藏内容的元素
-  const modifyElement = (elem: HTMLElement) => {
-    originalStyles.set(elem, elem.getAttribute('style') || '')
-    elem.style.overflow = 'visible !important'
-    elem.style.maxHeight = 'none !important'
-    elem.style.maxWidth = 'none !important'
-    elem.style.display = 'block !important'
-    elem.style.visibility = 'visible !important'
-    elem.style.height = 'auto !important'
-  }
-
   // 隐藏按钮
   const buttons = document.querySelectorAll('.step-actions button')
   buttons.forEach(btn => {
     const elem = btn as HTMLElement
     originalStyles.set(elem, elem.getAttribute('style') || '')
-    elem.style.display = 'none !important'
-  })
-
-  // 修改所有相关元素
-  reportRef.value.querySelectorAll('.el-table__wrapper, .el-scrollbar__wrap, .el-table__body-wrapper, [style*="height"], canvas').forEach(node => {
-    modifyElement(node as HTMLElement)
-  })
-
-  // 修改表格行高
-  reportRef.value.querySelectorAll('.el-table__row').forEach(node => {
-    const elem = node as HTMLElement
-    originalStyles.set(elem, elem.getAttribute('style') || '')
-    elem.style.height = 'auto !important'
+    elem.style.setProperty('display', 'none', 'important')
   })
 
   // 触发ECharts resize
@@ -695,7 +672,6 @@ const exportReport = () => {
         proxy: null,
         ignoreElements: (element: Element) => {
           return element.classList.contains('el-scrollbar__thumb') ||
-                 element.classList.contains('el-scrollbar__view') ||
                  element.classList.contains('step-actions')
         }
       },
