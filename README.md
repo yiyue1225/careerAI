@@ -45,7 +45,7 @@ DB_NAME=career_ai
 **4. 一键启动**
 
 ```bash
-# 同时启动 Vue 3 前端开发服务器与 Python 后端服务
+# 同时启动 Vue 3 前端开发服务器(port 5173)与后端服务(port 3000)
 npm run dev
 ```
 
@@ -58,3 +58,4 @@ npm run dev
 | AI 引擎 | Dify + Qwen-Turbo / GLM-4.5-Flash                   |
 | 工具    | Docker + frp + npm-run-all                          |
 
+同时该项目已经部署到 http://187.124.249.235/ 网站中
